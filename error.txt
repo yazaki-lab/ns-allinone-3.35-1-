@@ -1,0 +1,66 @@
+../scratch/myargo.cc:197:48: error: no member named 'Default' in 'ns3::YansWifiPhyHelper'
+  197 |     YansWifiPhyHelper phy = YansWifiPhyHelper::Default();
+      |                             ~~~~~~~~~~~~~~~~~~~^
+../scratch/myargo.cc:347:42: error: no member named 'Print' in 'ns3::Ipv4FlowClassifier::FiveTuple'
+  347 |         classifier->FindFlow(flow.first).Print(std::cout);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^
+In file included from ../scratch/myargo.cc:20:
+In file included from ./ns3/core-module.h:35:
+In file included from ./ns3/event-garbage-collector.h:25:
+./ns3/simulator.h:559:29: error: no matching function for call to 'MakeEvent'
+  559 |   return DoSchedule (delay, MakeEvent (f, std::forward<Ts> (args)...));
+      |                             ^~~~~~~~~
+../scratch/myargo.cc:313:16: note: in instantiation of function template specialization 'ns3::Simulator::Schedule<(lambda at ../scratch/myargo.cc:313:39), 0, 0>' requested here
+  313 |     Simulator::Schedule(Seconds(5.0), [&]() {
+      |                ^
+./ns3/make-event.h:191:13: note: candidate function not viable: no known conversion from '(lambda at ../scratch/myargo.cc:313:39)' to 'void (*)()' for 1st argument
+  191 | EventImpl * MakeEvent (void (*f)(void));
+      |             ^          ~~~~~~~~~~~~~~~
+./ns3/make-event.h:359:13: note: candidate function template not viable: requires 2 arguments, but 1 was provided
+  359 | EventImpl * MakeEvent (MEM mem_ptr, OBJ obj)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:597:13: note: candidate function template not viable: requires 2 arguments, but 1 was provided
+  597 | EventImpl * MakeEvent (void (*f)(U1), T1 a1)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:386:13: note: candidate function template not viable: requires 3 arguments, but 1 was provided
+  386 | EventImpl * MakeEvent (MEM mem_ptr, OBJ obj, T1 a1)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:626:13: note: candidate function template not viable: requires 3 arguments, but 1 was provided
+  626 | EventImpl * MakeEvent (void (*f)(U1,U2), T1 a1, T2 a2)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:416:13: note: candidate function template not viable: requires 4 arguments, but 1 was provided
+  416 | EventImpl * MakeEvent (MEM mem_ptr, OBJ obj, T1 a1, T2 a2)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:658:13: note: candidate function template not viable: requires 4 arguments, but 1 was provided
+  658 | EventImpl * MakeEvent (void (*f)(U1,U2,U3), T1 a1, T2 a2, T3 a3)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:448:13: note: candidate function template not viable: requires 5 arguments, but 1 was provided
+  448 | EventImpl * MakeEvent (MEM mem_ptr, OBJ obj, T1 a1, T2 a2, T3 a3)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:692:13: note: candidate function template not viable: requires 5 arguments, but 1 was provided
+  692 | EventImpl * MakeEvent (void (*f)(U1,U2,U3,U4), T1 a1, T2 a2, T3 a3, T4 a4)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:482:13: note: candidate function template not viable: requires 6 arguments, but 1 was provided
+  482 | EventImpl * MakeEvent (MEM mem_ptr, OBJ obj, T1 a1, T2 a2, T3 a3, T4 a4)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:728:13: note: candidate function template not viable: requires 6 arguments, but 1 was provided
+  728 | EventImpl * MakeEvent (void (*f)(U1,U2,U3,U4,U5), T1 a1, T2 a2, T3 a3, T4 a4, T5 a5)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:518:13: note: candidate function template not viable: requires 7 arguments, but 1 was provided
+  518 | EventImpl * MakeEvent (MEM mem_ptr, OBJ obj,
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~
+  519 |                        T1 a1, T2 a2, T3 a3, T4 a4, T5 a5)
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:766:13: note: candidate function template not viable: requires 7 arguments, but 1 was provided
+  766 | EventImpl * MakeEvent (void (*f)(U1,U2,U3,U4,U5,U6), T1 a1, T2 a2, T3 a3, T4 a4, T5 a5, T6 a6)
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+./ns3/make-event.h:557:13: note: candidate function template not viable: requires 8 arguments, but 1 was provided
+  557 | EventImpl * MakeEvent (MEM mem_ptr, OBJ obj,
+      |             ^          ~~~~~~~~~~~~~~~~~~~~~
+  558 |                        T1 a1, T2 a2, T3 a3, T4 a4, T5 a5, T6 a6)
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+3 errors generated.
+
+Waf: Leaving directory `/Users/kamikawamasahiro/Downloads/ns-allinone-3.35(1)/ns-3.35/build'
+Build failed
+ -> task in 'myargo' failed with exit status 1 (run with -v to display more information)
