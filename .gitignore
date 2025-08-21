@@ -1,7 +1,15 @@
 # 改善版
 ns-3.35/.waf3-*
-ns-3.35/build/
-!/ns-3.35/build/scratch/
+ns-3.35/build/bindings
+ns-3.35/build/c4che
+ns-3.35/build/lib
+ns-3.35/build/ns3/
+ns-3.35/build/src/
+ns-3.35/build/utils/
+ns-3.35/build/.*
+ns-3.35/build/build-status.py
+ns-3.35/build/config.log
+ns-3.35/build/compile_commands.json
 ns-3.35/examples/
-ns-3.35/.lock-waf_*
+ns-3.35/.lock-waf*
 netanim-3.108/
