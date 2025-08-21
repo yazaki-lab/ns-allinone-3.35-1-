@@ -218,8 +218,9 @@ int main(int argc, char *argv[]) {
 
     // WiFiè¨­å®š
     WifiHelper wifi;
-    wifi.SetStandard(WIFI_STANDARD_80211n_2_4GHZ);
-    wifi.SetRemoteStationManager("ns3::MinstrelWifiManager");
+    wifi.SetStandard(WIFI_STANDARD_80211a);
+    wifi.SetRemoteStationManager("ns3::IdealWifiManager");
+    // wifi.SetRemoteStationManager("ns3::MinstrelWifiManager");
 
     // PHYè¨­å®šï¼ˆDefaultãƒ¡ã‚½ãƒƒãƒ‰ãŒãªã„ããã†ãªã®ã§ç›´æŽ¥è¨­å®šï¼‰
     YansWifiChannelHelper channel = YansWifiChannelHelper::Default();
