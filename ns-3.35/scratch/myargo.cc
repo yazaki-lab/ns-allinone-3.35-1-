@@ -18,7 +18,7 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE("WiFiAPSelection");
 
-// APæƒ…å ±ã‚'æ ¼ç´ã™ã‚‹æ§‹é€ ä½"
+// APの情報
 struct APInfo {
     uint32_t apId;
     Vector position;
@@ -28,7 +28,7 @@ struct APInfo {
     uint32_t channel;
 };
 
-// ãƒ¦ãƒ¼ã‚¶æƒ…å ±ã‚'æ ¼ç´ã™ã‚‹æ§‹é€ ä½"
+// Userの情報
 struct UserInfo {
     uint32_t userId;
     Vector position;
@@ -39,29 +39,29 @@ struct UserInfo {
 class APSelectionAlgorithm {
 private:
     std::vector<APInfo> m_apList;
-    double m_dThreshold;  // ç§»å‹•å¯èƒ½è·é›¢
-    double m_thetaThreshold;  // æœ€ä½Žè¦æ±‚ã‚¹ãƒ«ãƒ¼ãƒ—ãƒƒãƒˆ
-    std::vector<double> m_weights; // ã‚¹ã‚³ã‚¢é‡ã¿ [w1, w2, w3, w4]
+    double m_dThreshold;  // APの距離閾値
+    double m_thetaThreshold;  // 最低要求スループット
+    std::vector<double> m_weights; // 各指標の重み [w1, w2, w3, w4]
 
 public:
     APSelectionAlgorithm(double dTh, double thetaTh) 
         : m_dThreshold(dTh), m_thetaThreshold(thetaTh) {
-        m_weights = {0.4, 0.3, 0.2, 0.1}; // ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆé‡ã¿
+        m_weights = {0.4, 0.3, 0.2, 0.1}; // 各指標の重み  
     }
 
     void UpdateAPInfo(const std::vector<APInfo>& apList) {
         m_apList = apList;
     }
 
-    // è·é›¢è¨ˆç®—
+    // 距離計算
     double CalculateDistance(const Vector& pos1, const Vector& pos2) {
         return sqrt(pow(pos1.x - pos2.x, 2) + pow(pos1.y - pos2.y, 2));
     }
 
-    // ä¼é€ãƒ¬ãƒ¼ãƒˆè¨ˆç®—ï¼ˆè·é›¢ãƒ™ãƒ¼ã‚¹ï¼‰
+    // 伝送レート計算（距離に基づく）
     double CalculateTransmissionRate(const Vector& userPos, const Vector& apPos) {
         double distance = CalculateDistance(userPos, apPos);
-        // 802.11nã®ç°¡å˜ãªè·é›¢-ãƒ¬ãƒ¼ãƒˆãƒ¢ãƒ‡ãƒ«
+        // 802.11nの仕様に基づく伝送レート
         if (distance < 5.0) return 150.0;  // Mbps
         else if (distance < 10.0) return 130.0;
         else if (distance < 15.0) return 100.0;
@@ -70,7 +70,7 @@ public:
         else return 6.5;
     }
 
-    // ã‚¹ãƒ«ãƒ¼ãƒ—ãƒƒãƒˆè¨ˆç®—ï¼ˆèª¿å'Œå¹³å‡ï¼‰
+    // スループット計算（幾何平均）
     double CalculateThroughput(const APInfo& ap, double newRate) {
         if (ap.userRates.empty()) {
             return newRate;
@@ -85,11 +85,11 @@ public:
         return (ap.userRates.size() + 1) / sum;
     }
 
-    // æœ€é©APé¸æŠžã‚¢ãƒ«ã‚´ãƒªã‚ºãƒ 
+    // 最適AP選択アルゴリズム
     std::pair<uint32_t, Vector> SelectOptimalAP(const Vector& userPos) {
         std::vector<uint32_t> candidates;
-        
-        // å€™è£œAPé¸æŠžï¼ˆå¼1,2ï¼‰
+
+        // 候補AP選択（距離閾値）
         for (const auto& ap : m_apList) {
             double distance = CalculateDistance(userPos, ap.position);
             if (distance <= m_dThreshold) {
@@ -98,16 +98,16 @@ public:
         }
 
         if (candidates.empty()) {
-            return std::make_pair(0, Vector(0, 0, 0)); // æŽ¥ç¶šä¸å¯
+            return std::make_pair(0, Vector(0, 0, 0)); // 接続先APなし
         }
 
-        // ã‚¹ã‚³ã‚¢è¨ˆç®—
+        // スコア計算
         std::vector<std::pair<uint32_t, double>> apScores;
         double thetaMax = 0, thetaMin = 1e9;
         double dMax = 0, dMin = 1e9;
         uint32_t nMax = 0;
 
-        // æœ€å¤§æœ€å°å€¤è¨ˆç®—
+        // 最大最小値計算
         for (uint32_t apId : candidates) {
             const APInfo& ap = m_apList[apId];
             double newRate = CalculateTransmissionRate(userPos, ap.position);
@@ -121,19 +121,19 @@ public:
             nMax = std::max(nMax, ap.connectedUsers);
         }
 
-        // å„APã®ã‚¹ã‚³ã‚¢è¨ˆç®—ï¼ˆå¼6-10ï¼‰
+        // スコア計算（6-10）  
         for (uint32_t apId : candidates) {
             const APInfo& ap = m_apList[apId];
             double newRate = CalculateTransmissionRate(userPos, ap.position);
             double throughput = CalculateThroughput(ap, newRate);
             double distance = CalculateDistance(userPos, ap.position);
 
-            // ã‚¹ã‚³ã‚¢è¨ˆç®—
+            // スコア計算
             double scoreTheta = (thetaMax == thetaMin) ? 1.0 : 
                                (throughput - thetaMin) / (thetaMax - thetaMin);
             double scoreDist = (dMax == dMin) ? 1.0 : 
                               1.0 - (distance - dMin) / (dMax - dMin);
-            double scoreChan = 1.0 - ap.channelUtilization; // ä½¿ç"¨çŽ‡ãŒä½Žã„ã»ã©è‰¯ã„
+            double scoreChan = 1.0 - ap.channelUtilization; // チャンネル利用率が低いほど良い
             double scoreUsers = (nMax == 0) ? 1.0 : 
                                1.0 - (double)ap.connectedUsers / nMax;
 
@@ -145,38 +145,38 @@ public:
             apScores.push_back(std::make_pair(apId, totalScore));
         }
 
-        // ã‚¹ã‚³ã‚¢é †ã§ã‚½ãƒ¼ãƒˆ
+        // スコア計算
         std::sort(apScores.begin(), apScores.end(), 
                  [](const auto& a, const auto& b) { return a.second > b.second; });
 
-        // æœ€é©APã‚'è¿"ã™ï¼ˆç§»å‹•ãƒ™ã‚¯ãƒˆãƒ«ã¯0ã¨ã™ã‚‹ï¼‰
+        // 最適APの選択（移動平均フィルタ適用）
         return std::make_pair(apScores[0].first, Vector(0, 0, 0));
     }
 };
 
-// ã‚°ãƒ­ãƒ¼ãƒãƒ«å¤‰æ•°
+// 結果出力
 static std::ofstream* g_resultFile = nullptr;
 static NodeContainer* g_apNodes = nullptr;
 static NodeContainer* g_staNodes = nullptr;
 static uint32_t g_nAPs = 0;
 static uint32_t g_nUsers = 0;
 
-// APé¸æŠžçµæžœå‡ºåŠ›é–¢æ•°
+// AP選択結果出力
 void PrintAPSelectionResults() {
     if (!g_resultFile || !g_apNodes || !g_staNodes) return;
     
     for (uint32_t i = 0; i < g_nUsers; ++i) {
         Ptr<MobilityModel> mobility = g_staNodes->Get(i)->GetObject<MobilityModel>();
         Vector pos = mobility->GetPosition();
-        
-        // ç°¡å˜ãªAPæƒ…å ±ç"Ÿæˆ
+
+        // AP情報の更新
         std::vector<APInfo> apInfo(g_nAPs);
         for (uint32_t j = 0; j < g_nAPs; ++j) {
             apInfo[j].apId = j;
             apInfo[j].position = g_apNodes->Get(j)->GetObject<MobilityModel>()->GetPosition();
-            apInfo[j].connectedUsers = 3; // ç°¡ç•¥åŒ–
-            apInfo[j].channelUtilization = 0.5; // ç°¡ç•¥åŒ–
-            apInfo[j].channel = j % 3; // 3ãƒãƒ£ãƒãƒ«
+            apInfo[j].connectedUsers = 3; // 仮の値
+            apInfo[j].channelUtilization = 0.5; // 仮の値
+            apInfo[j].channel = j % 3; // 3つのチャネル
         }
         
         APSelectionAlgorithm algorithm(15.0, 10.0);
@@ -190,24 +190,24 @@ void PrintAPSelectionResults() {
 }
 
 int main(int argc, char *argv[]) {
-    // ã‚·ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³è¨­å®š
+    // パラメータ設定
     uint32_t nAPs = 5;
     uint32_t nUsers = 18; // 4+2+3+4+5
-    double simTime = 60.0; // 60ç§'
-    
-    // ã‚°ãƒ­ãƒ¼ãƒãƒ«å¤‰æ•°ã®è¨­å®š
+    double simTime = 60.0; // 60秒
+
+    // 結果出力用ファイルの設定
     g_nAPs = nAPs;
     g_nUsers = nUsers;
-    
-    // ã‚³ãƒžãƒ³ãƒ‰ãƒ©ã‚¤ãƒ³å¼•æ•°
+
+    // コマンドライン引数の処理
     CommandLine cmd;
     cmd.AddValue("simTime", "Simulation time (seconds)", simTime);
     cmd.Parse(argc, argv);
 
-    // ãƒ­ã‚°è¨­å®š
+    // パラメータ設定
     LogComponentEnable("WiFiAPSelection", LOG_LEVEL_INFO);
 
-    // ãƒŽãƒ¼ãƒ‰ä½œæˆ
+    // APノードの作成
     NodeContainer apNodes;
     apNodes.Create(nAPs);
     g_apNodes = &apNodes;
@@ -216,22 +216,22 @@ int main(int argc, char *argv[]) {
     staNodes.Create(nUsers);
     g_staNodes = &staNodes;
 
-    // WiFiè¨­å®š
+    // WiFi設定
     WifiHelper wifi;
     wifi.SetStandard(WIFI_STANDARD_80211a);
     wifi.SetRemoteStationManager("ns3::IdealWifiManager");
     // wifi.SetRemoteStationManager("ns3::MinstrelWifiManager");
 
-    // PHYè¨­å®šï¼ˆDefaultãƒ¡ã‚½ãƒƒãƒ‰ãŒãªã„ããã†ãªã®ã§ç›´æŽ¥è¨­å®šï¼‰
+    // PHY設定（Default PHYモデルを使用）
     YansWifiChannelHelper channel = YansWifiChannelHelper::Default();
     YansWifiPhyHelper phy;
     phy.SetChannel(channel.Create());
 
-    // MACè¨­å®š
+    // MAC設定
     WifiMacHelper mac;
     Ssid ssid = Ssid("wifi-network");
 
-    // APã®è¨­å®š
+    // AP設定
     NetDeviceContainer apDevices;
     mac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(ssid));
     for (uint32_t i = 0; i < nAPs; ++i) {
@@ -239,15 +239,15 @@ int main(int argc, char *argv[]) {
         apDevices.Add(device);
     }
 
-    // STAã®è¨­å®š
+    // STA設定
     NetDeviceContainer staDevices;
     mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssid));
     staDevices = wifi.Install(phy, mac, staNodes);
 
-    // ç§»å‹•ãƒ¢ãƒ‡ãƒ«è¨­å®š
+    // 移動端末設定
     MobilityHelper mobility;
 
-    // APé…ç½®ï¼ˆ30mÃ—30mã‚¨ãƒªã‚¢ã«ç­‰é–"éš"ï¼‰
+    // AP配置（30m×30mの正方形）
     Ptr<ListPositionAllocator> apPositionAlloc = CreateObject<ListPositionAllocator>();
     apPositionAlloc->Add(Vector(7.5, 7.5, 0.0));   // AP0
     apPositionAlloc->Add(Vector(22.5, 7.5, 0.0));  // AP1
@@ -259,31 +259,31 @@ int main(int argc, char *argv[]) {
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
     mobility.Install(apNodes);
 
-    // STAåˆæœŸé…ç½®
+    // STA設定
     Ptr<ListPositionAllocator> staPositionAlloc = CreateObject<ListPositionAllocator>();
-    
-    // AP0å'¨è¾ºã«4äºº
+
+    // AP0接続の4端末
     staPositionAlloc->Add(Vector(5.0, 5.0, 0.0));
     staPositionAlloc->Add(Vector(10.0, 5.0, 0.0));
     staPositionAlloc->Add(Vector(5.0, 10.0, 0.0));
     staPositionAlloc->Add(Vector(10.0, 10.0, 0.0));
-    
-    // AP1å'¨è¾ºã«2äºº
+
+    // AP1接続の2端末
     staPositionAlloc->Add(Vector(20.0, 5.0, 0.0));
     staPositionAlloc->Add(Vector(25.0, 5.0, 0.0));
-    
-    // AP2å'¨è¾ºã«3äºº
+
+    // AP2接続の3端末
     staPositionAlloc->Add(Vector(5.0, 20.0, 0.0));
     staPositionAlloc->Add(Vector(10.0, 20.0, 0.0));
     staPositionAlloc->Add(Vector(5.0, 25.0, 0.0));
-    
-    // AP3å'¨è¾ºã«4äºº
+
+    // AP3接続の4端末
     staPositionAlloc->Add(Vector(20.0, 20.0, 0.0));
     staPositionAlloc->Add(Vector(25.0, 20.0, 0.0));
     staPositionAlloc->Add(Vector(20.0, 25.0, 0.0));
     staPositionAlloc->Add(Vector(25.0, 25.0, 0.0));
-    
-    // AP4å'¨è¾ºã«5äºº
+
+    // AP4接続の5端末
     staPositionAlloc->Add(Vector(12.0, 12.0, 0.0));
     staPositionAlloc->Add(Vector(18.0, 12.0, 0.0));
     staPositionAlloc->Add(Vector(12.0, 18.0, 0.0));
@@ -296,18 +296,18 @@ int main(int argc, char *argv[]) {
                               "Speed", StringValue("ns3::ConstantRandomVariable[Constant=1.0]"));
     mobility.Install(staNodes);
 
-    // ã‚¤ãƒ³ã‚¿ãƒ¼ãƒãƒƒãƒˆãƒ—ãƒ­ãƒˆã‚³ãƒ«ã‚¹ã‚¿ãƒƒã‚¯
+    // アプリケーション設定
     InternetStackHelper stack;
     stack.Install(apNodes);
     stack.Install(staNodes);
 
-    // IPã‚¢ãƒ‰ãƒ¬ã‚¹å‰²ã‚Šå½"ã¦
+    // IPアドレス割り当て
     Ipv4AddressHelper address;
     address.SetBase("10.1.0.0", "255.255.255.0");
     Ipv4InterfaceContainer apInterfaces = address.Assign(apDevices);
     Ipv4InterfaceContainer staInterfaces = address.Assign(staDevices);
 
-    // ãƒˆãƒ©ãƒ•ã‚£ãƒƒã‚¯ç"Ÿæˆï¼ˆUDPã‚¨ã‚³ãƒ¼ã‚¢ãƒ—ãƒªã‚±ãƒ¼ã‚·ãƒ§ãƒ³ï¼‰
+    // UDPエコーサーバー設定
     UdpEchoServerHelper echoServer(9);
     ApplicationContainer serverApps = echoServer.Install(apNodes.Get(0));
     serverApps.Start(Seconds(1.0));
@@ -322,27 +322,27 @@ int main(int argc, char *argv[]) {
     clientApps.Start(Seconds(2.0));
     clientApps.Stop(Seconds(simTime));
 
-    // FlowMonitorè¨­å®š
+    // FlowMonitor設定
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
 
-    // NetAnimè¨­å®š
+    // NetAnim設定
     AnimationInterface anim("kamikawa-animation.xml");
 
-    // çµæžœãƒ•ã‚¡ã‚¤ãƒ«ã‚ªãƒ¼ãƒ—ãƒ³
+    // 結果ファイル設定
     std::ofstream resultFile("ap_selection_results.txt");
     g_resultFile = &resultFile;
     resultFile << "Time(s)\tUserID\tPosition(x,y)\tSelectedAP\tThroughput(Mbps)" << std::endl;
 
-    // ã‚·ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³å®Ÿè¡Œ
+    // シミュレーション実行
     Simulator::Stop(Seconds(simTime));
-    
-    // å®šæœŸçš„ãªAPé¸æŠžçµæžœå‡ºåŠ›ï¼ˆé–¢æ•°ãƒãƒ¼ã‚¿ãƒ¼ã‚'ä½¿ç"¨ï¼‰
+
+    // 定期的なAP選択結果出力（定期的にファイルに書き込む）
     Simulator::Schedule(Seconds(5.0), &PrintAPSelectionResults);
 
     Simulator::Run();
 
-    // FlowMonitorçµ±è¨ˆå‡ºåŠ›
+    // FlowMonitor結果出力
     monitor->CheckForLostPackets();
     Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier>(flowmon.GetClassifier());
     std::map<FlowId, FlowMonitor::FlowStats> stats = monitor->GetFlowStats();
