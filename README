@@ -1,19 +1,66 @@
-This is ns-3-allinone.
+これは ns-3-allinone です。
 
-If you have downloaded this in tarball release format, this directory
-contains some released ns-3 version, along with 3rd party components
-necessary to support all optional ns-3 features, such as Python
-bindings and the Network Animator.  In this case, just run the
-script build.py; all the components, plus ns-3 itself, will thus be
-built.  This directory also contains the bake build tool, which allows
-access to several additional modules including the Network Simulation
-Cradle, Direct Code Execution environment, and click and openflow 
-extensions for ns-3.
+tarball 形式でダウンロードした場合、このディレクトリには
+リリースされた ns-3 のバージョンと、Python バインディングや
+Network Animator などのオプション機能をサポートするために必要な
+サードパーティコンポーネントが含まれています。 この場合、build.py スクリプトを実行するだけで、
+すべてのコンポーネントと ns-3 本体がビルドされます。このディレクトリには、
+Network Simulation Cradle、Direct Code Execution 環境、および ns-3 用の
+click と openflow 拡張機能を含む複数の追加モジュールにアクセス可能な
+bake ビルドツールも含まれています。
 
-If you have downloaded this from mercurial, the download.py script will
-download bake, netanim, pybindgen, and ns-3-dev.  The usage to use
-basic ns-3 (netanim and ns-3-dev) is to type:
+Mercurialからダウンロードした場合、download.pyスクリプトが
+bake、netanim、pybindgen、およびns-3-devをダウンロードします。
+基本のns-3（netanimとns-3-dev）を使用するには、次のように入力します：
 ./download.py
 ./build.py
-and cd into ns-3-dev for further work.  Consult the bake documentation
-on how to use bake to access optional ns-3 components.
+ns-3-dev ディレクトリに移動して作業を続けます。bake のドキュメントを参照して、
+bake を使用してオプションの ns-3 コンポーネントにアクセスする方法を確認してください。
+
+
+実行とアニメーション実行方法（macのみ成功確認しました，参考はhttps://zenn.dev/joho0724/articles/sankaku0724-newcreate28）
+ホームディレクトリで以下を実行
+
+xcode-select --install
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+brew update
+
+brew install qt mercurial libxml2 pyenv gsl libgcrypt gtk cvs unar p7zip xz bzt bar dzr && brew install --cask doxygen cmake && pip3 install meson
+
+pyenv install 3.9.13
+pyenv global 3.9.13
+
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.zprofile
+echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.zprofile
+echo 'eval "$(pyenv init --path)"' >> ~/.zprofile
+source ~/.zprofile
+
+cd ns-allinone-3.35/ns-3.35
+
+CXXFLAGS="-std=c++17" ./waf configure
+./waf build
+
+./waf --run scratch-simulator
+
+# ここまででシミュレーションが回る
+
+#ns-allinone-3.35ディレクトリに戻って以下を実行
+
+brew install qt@5
+
+cd ~/ns-allinone-3.35/netanim-3.108
+
+/opt/homebrew/opt/qt@5/bin/qmake NetAnim.pro
+
+make
+
+# ns-allinone-3.35/ns-3.35ディレクトリで以下を実行
+./waf --run scratch/[実行するc++ファイル名(拡張子除く)]
+
+# ns-allinome-3.35/netanimディレクトリで以下を実行
+./NetAnim
+
+ここで開いたGUIにwaf runで生成したxmlファイルを入れる
+
+
+
