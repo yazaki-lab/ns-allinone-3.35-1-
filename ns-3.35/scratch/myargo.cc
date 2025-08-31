@@ -20,23 +20,23 @@ NS_LOG_COMPONENT_DEFINE("WiFiAPSelection");
 
 // APの情報
 struct APInfo {
-    uint32_t apId;
-    Vector position;
-    uint32_t connectedUsers;
-    double channelUtilization;
-    std::vector<double> userRates;
-    uint32_t channel;
+    uint32_t apId; // APのID
+    Vector position; // APの位置
+    uint32_t connectedUsers; // 接続中のユーザー数
+    double channelUtilization; // チャネル利用率
+    std::vector<double> userRates; // ユーザーごとのスループット
+    uint32_t channel; // チャネル番号
 };
 
 // Userの情報
 struct UserInfo {
-    uint32_t userId;
-    Vector position;
-    uint32_t connectedAP;
-    double throughput;
+    uint32_t userId; // ユーザーID
+    Vector position; // ユーザーの位置
+    uint32_t connectedAP; // 接続中のAP
+    double throughput; // ユーザーのスループット
 };
 
-class APSelectionAlgorithm {
+class APSelectionAlgorithm { //AP選択アルゴリズム
 private:
     std::vector<APInfo> m_apList;
     double m_dThreshold;  // APの距離閾値
@@ -121,7 +121,7 @@ public:
             nMax = std::max(nMax, ap.connectedUsers);
         }
 
-        // スコア計算（6-10）  
+        // スコア計算（式6-10）  
         for (uint32_t apId : candidates) {
             const APInfo& ap = m_apList[apId];
             double newRate = CalculateTransmissionRate(userPos, ap.position);
