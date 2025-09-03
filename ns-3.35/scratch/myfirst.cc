@@ -147,7 +147,7 @@ int main(int argc, char *argv[])
     mac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(ssidAp2));
     apDevices.Add(wifi.Install(phy, mac, apNodes.Get(1)));
     
-    // 既存ユーザー設定 (AP1に2台、AP2に1台)
+    // 既存ユーザー設定 (AP1に3台、AP2に5台)
     mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssidAp1), "ActiveProbing", BooleanValue(false));
     staDevices.Add(wifi.Install(phy, mac, staNodes.Get(0)));
     staDevices.Add(wifi.Install(phy, mac, staNodes.Get(1)));

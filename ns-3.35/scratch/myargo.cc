@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
@@ -36,7 +37,18 @@ struct UserInfo {
     double throughput; // ユーザーのスループット
 };
 
-class APSelectionAlgorithm { //AP選択アルゴリズム
+// AP選択結果を格納する構造体
+struct APSelectionResult {
+    uint32_t userId;
+    Vector userPosition;
+    uint32_t selectedAP;
+    double expectedThroughput;
+    double distance;
+    double score;
+    std::vector<std::pair<uint32_t, double>> allScores; // 全APのスコア
+};
+
+class APSelectionAlgorithm { //AP選択アルゴリズム 
 private:
     std::vector<APInfo> m_apList;
     double m_dThreshold;  // APの距離閾値
@@ -47,7 +59,18 @@ public:
     APSelectionAlgorithm(double dTh, double thetaTh) 
         : m_dThreshold(dTh), m_thetaThreshold(thetaTh) {
         m_weights = {0.4, 0.3, 0.2, 0.1}; // 各指標の重み  
+        // 変更案の例
+        // // 案1：スループット最優先
+        // m_weights = {0.7, 0.1, 0.1, 0.1}; 
+
+        // // 案2：負荷分散最優先
+        // m_weights = {0.1, 0.2, 0.1, 0.6}; 
+
+        // // 案3：距離最優先
+        // m_weights = {0.2, 0.6, 0.1, 0.1}; 
     }
+    
+    const std::vector<double>& getWeights() const { return m_weights; }
 
     void UpdateAPInfo(const std::vector<APInfo>& apList) {
         m_apList = apList;
@@ -85,8 +108,16 @@ public:
         return (ap.userRates.size() + 1) / sum;
     }
 
-    // 最適AP選択アルゴリズム
-    std::pair<uint32_t, Vector> SelectOptimalAP(const Vector& userPos) {
+    // 最適AP選択アルゴリズム（詳細な結果を返す）
+    APSelectionResult SelectOptimalAPDetailed(const Vector& userPos, uint32_t userId) {
+        APSelectionResult result;
+        result.userId = userId;
+        result.userPosition = userPos;
+        result.selectedAP = 0;
+        result.expectedThroughput = 0.0;
+        result.distance = 0.0;
+        result.score = 0.0;
+
         std::vector<uint32_t> candidates;
 
         // 候補AP選択（距離閾値）
@@ -98,7 +129,7 @@ public:
         }
 
         if (candidates.empty()) {
-            return std::make_pair(0, Vector(0, 0, 0)); // 接続先APなし
+            return result; // 接続先APなし
         }
 
         // スコア計算
@@ -143,49 +174,179 @@ public:
                                m_weights[3] * scoreUsers;
 
             apScores.push_back(std::make_pair(apId, totalScore));
+            result.allScores.push_back(std::make_pair(apId, totalScore));
         }
 
-        // スコア計算
+        // スコア順にソート
         std::sort(apScores.begin(), apScores.end(), 
                  [](const auto& a, const auto& b) { return a.second > b.second; });
 
-        // 最適APの選択（移動平均フィルタ適用）
-        return std::make_pair(apScores[0].first, Vector(0, 0, 0));
+        // 最適APの選択
+        result.selectedAP = apScores[0].first;
+        result.score = apScores[0].second;
+        result.distance = CalculateDistance(userPos, m_apList[result.selectedAP].position);
+        result.expectedThroughput = CalculateThroughput(m_apList[result.selectedAP], 
+            CalculateTransmissionRate(userPos, m_apList[result.selectedAP].position));
+
+        return result;
+    }
+
+    // 簡単なAP選択（互換性のため）
+    std::pair<uint32_t, Vector> SelectOptimalAP(const Vector& userPos) {
+        APSelectionResult result = SelectOptimalAPDetailed(userPos, 0);
+        return std::make_pair(result.selectedAP, Vector(0, 0, 0));
     }
 };
 
-// 結果出力
+// グローバル変数
 static std::ofstream* g_resultFile = nullptr;
 static NodeContainer* g_apNodes = nullptr;
 static NodeContainer* g_staNodes = nullptr;
 static uint32_t g_nAPs = 0;
 static uint32_t g_nUsers = 0;
+static APSelectionAlgorithm* g_algorithm = nullptr;
+static std::vector<APInfo> g_apInfoList;
 
-// AP選択結果出力
+// 初期状態の表示
+void PrintInitialState() {
+    std::cout << "\n" << std::string(80, '=') << std::endl;
+    std::cout << "         WiFi APセレクションシミュレーション 初期状態" << std::endl;
+    std::cout << std::string(80, '=') << std::endl;
+
+    // シミュレーション設定
+    std::cout << "\n【シミュレーション設定】" << std::endl;
+    std::cout << "  AP数: " << g_nAPs << "台" << std::endl;
+    std::cout << "  ユーザー数: " << g_nUsers << "台" << std::endl;
+    std::cout << "  シミュレーション時間: 60秒" << std::endl;
+    std::cout << "  シミュレーション範囲: 30m × 30m" << std::endl;
+
+    // AP配置情報
+    std::cout << "\n【AP配置情報】" << std::endl;
+    for (uint32_t i = 0; i < g_nAPs; ++i) {
+        Vector pos = g_apNodes->Get(i)->GetObject<MobilityModel>()->GetPosition();
+        std::cout << "  AP" << i << ": 位置(" << std::fixed << std::setprecision(1) 
+                  << pos.x << "m, " << pos.y << "m)" 
+                  << ", 接続ユーザー数:" << g_apInfoList[i].connectedUsers << "台"
+                  << ", チャネル利用率:" << std::setprecision(1) << (g_apInfoList[i].channelUtilization * 100) << "%" << std::endl;
+    }
+
+    // ユーザー初期位置
+    std::cout << "\n【ユーザー初期配置】" << std::endl;
+    std::vector<std::vector<uint32_t>> apUsers(g_nAPs);
+    
+    // 各APに接続予定のユーザーを分類
+    for (uint32_t i = 0; i < g_nUsers; ++i) {
+        uint32_t expectedAP;
+        if (i < 4) expectedAP = 0;      // 最初の4台はAP0
+        else if (i < 6) expectedAP = 1; // 次の2台はAP1
+        else if (i < 9) expectedAP = 2; // 次の3台はAP2
+        else if (i < 13) expectedAP = 3; // 次の4台はAP3
+        else expectedAP = 4;            // 残りはAP4
+        
+        apUsers[expectedAP].push_back(i);
+    }
+
+    for (uint32_t apId = 0; apId < g_nAPs; ++apId) {
+        std::cout << "  AP" << apId << "接続予定ユーザー:" << std::endl;
+        for (uint32_t userId : apUsers[apId]) {
+            Vector pos = g_staNodes->Get(userId)->GetObject<MobilityModel>()->GetPosition();
+            std::cout << "    ユーザー" << userId << ": 位置(" 
+                      << std::fixed << std::setprecision(1)
+                      << pos.x << "m, " << pos.y << "m)" << std::endl;
+        }
+    }
+
+    // アルゴリズム設定
+    std::cout << "\n【AP選択アルゴリズム設定】" << std::endl;
+    std::cout << "  距離閾値: 15.0m" << std::endl;
+    std::cout << "  最低要求スループット: 10.0Mbps" << std::endl;
+    
+    // 実際の重みの値を表示
+    if (g_algorithm) {
+        const std::vector<double>& weights = g_algorithm->getWeights();
+        std::cout << "  スコア重み: [スループット:" << std::fixed << std::setprecision(1) << weights[0] 
+                  << ", 距離:" << weights[1] 
+                  << ", チャネル:" << weights[2] 
+                  << ", ユーザー数:" << weights[3] << "]" << std::endl;
+    }
+    
+    std::cout << std::string(80, '=') << std::endl;
+}
+
+// AP選択結果の詳細表示
 void PrintAPSelectionResults() {
-    if (!g_resultFile || !g_apNodes || !g_staNodes) return;
+    if (!g_resultFile || !g_apNodes || !g_staNodes || !g_algorithm) return;
+    
+    std::cout << "\n" << std::string(80, '=') << std::endl;
+    std::cout << "              AP選択アルゴリズム実行結果" << std::endl;
+    std::cout << std::string(80, '=') << std::endl;
+
+    std::vector<APSelectionResult> results;
     
     for (uint32_t i = 0; i < g_nUsers; ++i) {
         Ptr<MobilityModel> mobility = g_staNodes->Get(i)->GetObject<MobilityModel>();
         Vector pos = mobility->GetPosition();
 
-        // AP情報の更新
-        std::vector<APInfo> apInfo(g_nAPs);
-        for (uint32_t j = 0; j < g_nAPs; ++j) {
-            apInfo[j].apId = j;
-            apInfo[j].position = g_apNodes->Get(j)->GetObject<MobilityModel>()->GetPosition();
-            apInfo[j].connectedUsers = 3; // 仮の値
-            apInfo[j].channelUtilization = 0.5; // 仮の値
-            apInfo[j].channel = j % 3; // 3つのチャネル
-        }
+        APSelectionResult result = g_algorithm->SelectOptimalAPDetailed(pos, i);
+        results.push_back(result);
         
-        APSelectionAlgorithm algorithm(15.0, 10.0);
-        algorithm.UpdateAPInfo(apInfo);
-        auto result = algorithm.SelectOptimalAP(pos);
-        
+        // ファイルにも出力（元の形式を維持）
         *g_resultFile << "5.0\t" << i << "\t(" << pos.x << "," << pos.y << ")\t" 
-                     << result.first << "\t" << "50.0" << std::endl;
+                     << result.selectedAP << "\t" << result.expectedThroughput << std::endl;
     }
+
+    // ユーザーごとの詳細結果表示
+    std::cout << "\n【各ユーザーのAP選択結果】" << std::endl;
+    for (const auto& result : results) {
+        std::cout << "\n--- ユーザー" << result.userId << " ---" << std::endl;
+        std::cout << "  現在位置: (" << std::fixed << std::setprecision(1) 
+                  << result.userPosition.x << "m, " << result.userPosition.y << "m)" << std::endl;
+        std::cout << "  選択されたAP: AP" << result.selectedAP << std::endl;
+        std::cout << "  APまでの距離: " << std::setprecision(1) << result.distance << "m" << std::endl;
+        std::cout << "  予想スループット: " << std::setprecision(1) << result.expectedThroughput << "Mbps" << std::endl;
+        std::cout << "  総合スコア: " << std::setprecision(3) << result.score << std::endl;
+        
+        // 全APのスコア表示
+        std::cout << "  各APスコア詳細:" << std::endl;
+        for (const auto& score : result.allScores) {
+            Vector apPos = g_apNodes->Get(score.first)->GetObject<MobilityModel>()->GetPosition();
+            double dist = sqrt(pow(result.userPosition.x - apPos.x, 2) + 
+                             pow(result.userPosition.y - apPos.y, 2));
+            std::cout << "    AP" << score.first << ": スコア=" << std::setprecision(3) << score.second
+                      << " (距離:" << std::setprecision(1) << dist << "m)" << std::endl;
+        }
+    }
+
+    // 統計情報
+    std::cout << "\n【AP選択統計】" << std::endl;
+    std::map<uint32_t, uint32_t> apSelectionCount;
+    for (uint32_t i = 0; i < g_nAPs; ++i) {
+        apSelectionCount[i] = 0;
+    }
+    
+    for (const auto& result : results) {
+        apSelectionCount[result.selectedAP]++;
+    }
+
+    for (uint32_t i = 0; i < g_nAPs; ++i) {
+        double percentage = (double)apSelectionCount[i] / g_nUsers * 100.0;
+        std::cout << "  AP" << i << ": " << apSelectionCount[i] << "ユーザー選択 ("
+                  << std::fixed << std::setprecision(1) << percentage << "%)" << std::endl;
+    }
+
+    // 平均距離とスループット
+    double totalDistance = 0.0, totalThroughput = 0.0;
+    for (const auto& result : results) {
+        totalDistance += result.distance;
+        totalThroughput += result.expectedThroughput;
+    }
+    
+    std::cout << "\n【性能指標】" << std::endl;
+    std::cout << "  平均AP距離: " << std::setprecision(1) << (totalDistance / g_nUsers) << "m" << std::endl;
+    std::cout << "  平均予想スループット: " << std::setprecision(1) << (totalThroughput / g_nUsers) << "Mbps" << std::endl;
+
+    std::cout << std::string(80, '=') << std::endl;
+    
     g_resultFile->flush();
 }
 
@@ -195,7 +356,7 @@ int main(int argc, char *argv[]) {
     uint32_t nUsers = 18; // 4+2+3+4+5
     double simTime = 60.0; // 60秒
 
-    // 結果出力用ファイルの設定
+    // グローバル変数設定
     g_nAPs = nAPs;
     g_nUsers = nUsers;
 
@@ -204,7 +365,7 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("simTime", "Simulation time (seconds)", simTime);
     cmd.Parse(argc, argv);
 
-    // パラメータ設定
+    // ログ設定
     LogComponentEnable("WiFiAPSelection", LOG_LEVEL_INFO);
 
     // APノードの作成
@@ -220,9 +381,8 @@ int main(int argc, char *argv[]) {
     WifiHelper wifi;
     wifi.SetStandard(WIFI_STANDARD_80211a);
     wifi.SetRemoteStationManager("ns3::IdealWifiManager");
-    // wifi.SetRemoteStationManager("ns3::MinstrelWifiManager");
 
-    // PHY設定（Default PHYモデルを使用）
+    // PHY設定
     YansWifiChannelHelper channel = YansWifiChannelHelper::Default();
     YansWifiPhyHelper phy;
     phy.SetChannel(channel.Create());
@@ -253,13 +413,13 @@ int main(int argc, char *argv[]) {
     apPositionAlloc->Add(Vector(22.5, 7.5, 0.0));  // AP1
     apPositionAlloc->Add(Vector(7.5, 22.5, 0.0));  // AP2
     apPositionAlloc->Add(Vector(22.5, 22.5, 0.0)); // AP3
-    apPositionAlloc->Add(Vector(15.0, 15.0, 0.0)); // AP4 (ä¸­å¤®)
+    apPositionAlloc->Add(Vector(15.0, 15.0, 0.0)); // AP4 (中央)
 
     mobility.SetPositionAllocator(apPositionAlloc);
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
     mobility.Install(apNodes);
 
-    // STA設定
+    // STA配置
     Ptr<ListPositionAllocator> staPositionAlloc = CreateObject<ListPositionAllocator>();
 
     // AP0接続の4端末
@@ -295,6 +455,27 @@ int main(int argc, char *argv[]) {
                               "Bounds", RectangleValue(Rectangle(0, 30, 0, 30)),
                               "Speed", StringValue("ns3::ConstantRandomVariable[Constant=1.0]"));
     mobility.Install(staNodes);
+
+    // AP情報の初期化
+    g_apInfoList.resize(nAPs);
+    uint32_t userCounts[] = {4, 2, 3, 4, 5}; // 各APの接続ユーザー数
+    double utilizations[] = {0.6, 0.3, 0.45, 0.8, 0.75}; // チャネル利用率
+    
+    for (uint32_t i = 0; i < nAPs; ++i) {
+        g_apInfoList[i].apId = i;
+        g_apInfoList[i].position = apNodes.Get(i)->GetObject<MobilityModel>()->GetPosition();
+        g_apInfoList[i].connectedUsers = userCounts[i];
+        g_apInfoList[i].channelUtilization = utilizations[i];
+        g_apInfoList[i].channel = i % 3; // 3つのチャネル
+    }
+
+    // アルゴリズム初期化
+    APSelectionAlgorithm algorithm(15.0, 10.0);
+    algorithm.UpdateAPInfo(g_apInfoList);
+    g_algorithm = &algorithm;
+
+    // 初期状態表示
+    PrintInitialState();
 
     // アプリケーション設定
     InternetStackHelper stack;
@@ -337,7 +518,7 @@ int main(int argc, char *argv[]) {
     // シミュレーション実行
     Simulator::Stop(Seconds(simTime));
 
-    // 定期的なAP選択結果出力（定期的にファイルに書き込む）
+    // AP選択結果出力（シミュレーション開始時）
     Simulator::Schedule(Seconds(5.0), &PrintAPSelectionResults);
 
     Simulator::Run();
@@ -347,19 +528,37 @@ int main(int argc, char *argv[]) {
     Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier>(flowmon.GetClassifier());
     std::map<FlowId, FlowMonitor::FlowStats> stats = monitor->GetFlowStats();
 
-    std::cout << "\n=== Flow Monitor Statistics ===" << std::endl;
+    std::cout << "\n" << std::string(80, '=') << std::endl;
+    std::cout << "                シミュレーション最終結果" << std::endl;
+    std::cout << std::string(80, '=') << std::endl;
+    std::cout << "\n【実測通信性能】" << std::endl;
+    
+    double totalRealThroughput = 0.0;
+    uint32_t flowCount = 0;
+    
     for (auto& flow : stats) {
         Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(flow.first);
-        std::cout << "Flow " << flow.first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")" << std::endl;
         if (flow.second.timeLastRxPacket.GetSeconds() > flow.second.timeFirstTxPacket.GetSeconds()) {
-            std::cout << "  Throughput: " << flow.second.rxBytes * 8.0 / (flow.second.timeLastRxPacket.GetSeconds() - flow.second.timeFirstTxPacket.GetSeconds()) / 1024 / 1024 << " Mbps" << std::endl;
+            double throughput = flow.second.rxBytes * 8.0 / 
+                (flow.second.timeLastRxPacket.GetSeconds() - flow.second.timeFirstTxPacket.GetSeconds()) / 1024 / 1024;
+            std::cout << "  フロー " << flow.first << " (" << t.sourceAddress << " -> " << t.destinationAddress << "): "
+                      << std::fixed << std::setprecision(2) << throughput << " Mbps" << std::endl;
+            totalRealThroughput += throughput;
+            flowCount++;
         }
     }
+    
+    if (flowCount > 0) {
+        std::cout << "\n  平均実測スループット: " << std::setprecision(2) << (totalRealThroughput / flowCount) << " Mbps" << std::endl;
+    }
+
+    std::cout << "\n【シミュレーション完了】" << std::endl;
+    std::cout << "  結果ファイル: ap_selection_results.txt" << std::endl;
+    std::cout << "  アニメーションファイル: kamikawa-animation.xml" << std::endl;
+    std::cout << std::string(80, '=') << std::endl;
 
     resultFile.close();
     Simulator::Destroy();
-
-    std::cout << "\nSimulation completed. Results saved to ap_selection_results.txt" << std::endl;
 
     return 0;
 }
