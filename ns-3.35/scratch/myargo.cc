@@ -24,9 +24,9 @@ struct APInfo {
     uint32_t apId; // APのID
     Vector position; // APの位置
     uint32_t connectedUsers; // 接続中のユーザー数
-    double channelUtilization; // チャネル利用率
+    double channelUtilization; // チャンネル利用率
     std::vector<double> userRates; // ユーザーごとのスループット
-    uint32_t channel; // チャネル番号
+    uint32_t channel; // チャンネル番号
 };
 
 // Userの情報
@@ -48,7 +48,7 @@ struct APSelectionResult {
     std::vector<std::pair<uint32_t, double>> allScores; // 全APのスコア
 };
 
-class APSelectionAlgorithm { //AP選択アルゴリズム 
+class APSelectionAlgorithm { //AP選択アルゴリズム  
 private:
     std::vector<APInfo> m_apList;
     double m_dThreshold;  // APの距離閾値
@@ -58,8 +58,10 @@ private:
 public:
     APSelectionAlgorithm(double dTh, double thetaTh) 
         : m_dThreshold(dTh), m_thetaThreshold(thetaTh) {
+        // デフォルト重み設定
         m_weights = {0.4, 0.3, 0.2, 0.1}; // 各指標の重み  
-        // 変更案の例
+        
+        // 重み変更案の例
         // // 案1：スループット最優先
         // m_weights = {0.7, 0.1, 0.1, 0.1}; 
 
@@ -68,6 +70,18 @@ public:
 
         // // 案3：距離最優先
         // m_weights = {0.2, 0.6, 0.1, 0.1}; 
+        
+        // // 案4：チャンネル利用率最優先
+        // m_weights = {0.2, 0.2, 0.5, 0.1};
+        
+        // // 案5：バランス型（均等）
+        // m_weights = {0.25, 0.25, 0.25, 0.25};
+        
+        // // 案6：スループット・距離重視
+        // m_weights = {0.5, 0.4, 0.05, 0.05};
+        
+        // // 案7：負荷分散・チャンネル重視
+        // m_weights = {0.1, 0.1, 0.4, 0.4};
     }
     
     const std::vector<double>& getWeights() const { return m_weights; }
@@ -85,12 +99,29 @@ public:
     double CalculateTransmissionRate(const Vector& userPos, const Vector& apPos) {
         double distance = CalculateDistance(userPos, apPos);
         // 802.11nの仕様に基づく伝送レート
+        // 標準設定
         if (distance < 5.0) return 150.0;  // Mbps
         else if (distance < 10.0) return 130.0;
         else if (distance < 15.0) return 100.0;
         else if (distance < 20.0) return 65.0;
         else if (distance < 25.0) return 30.0;
         else return 6.5;
+        
+        // // より保守的な設定
+        // if (distance < 3.0) return 150.0;  // Mbps
+        // else if (distance < 8.0) return 100.0;
+        // else if (distance < 12.0) return 65.0;
+        // else if (distance < 18.0) return 30.0;
+        // else if (distance < 25.0) return 15.0;
+        // else return 6.5;
+        
+        // // より楽観的な設定
+        // if (distance < 8.0) return 150.0;  // Mbps
+        // else if (distance < 15.0) return 130.0;
+        // else if (distance < 22.0) return 100.0;
+        // else if (distance < 30.0) return 65.0;
+        // else if (distance < 35.0) return 30.0;
+        // else return 6.5;
     }
 
     // スループット計算（幾何平均）
@@ -99,6 +130,7 @@ public:
             return newRate;
         }
         
+        // 標準設定（調和平均）
         double sum = 0.0;
         for (double rate : ap.userRates) {
             sum += 1.0 / rate;
@@ -106,6 +138,20 @@ public:
         sum += 1.0 / newRate;
         
         return (ap.userRates.size() + 1) / sum;
+        
+        // // 算術平均での計算
+        // double sum = 0.0;
+        // for (double rate : ap.userRates) {
+        //     sum += rate;
+        // }
+        // return (sum + newRate) / (ap.userRates.size() + 1);
+        
+        // // 最小値での計算（最悪ケース）
+        // double minRate = newRate;
+        // for (double rate : ap.userRates) {
+        //     minRate = std::min(minRate, rate);
+        // }
+        // return minRate;
     }
 
     // 最適AP選択アルゴリズム（詳細な結果を返す）
@@ -227,7 +273,7 @@ void PrintInitialState() {
         std::cout << "  AP" << i << ": 位置(" << std::fixed << std::setprecision(1) 
                   << pos.x << "m, " << pos.y << "m)" 
                   << ", 接続ユーザー数:" << g_apInfoList[i].connectedUsers << "台"
-                  << ", チャネル利用率:" << std::setprecision(1) << (g_apInfoList[i].channelUtilization * 100) << "%" << std::endl;
+                  << ", チャンネル利用率:" << std::setprecision(1) << (g_apInfoList[i].channelUtilization * 100) << "%" << std::endl;
     }
 
     // ユーザー初期位置
@@ -266,7 +312,7 @@ void PrintInitialState() {
         const std::vector<double>& weights = g_algorithm->getWeights();
         std::cout << "  スコア重み: [スループット:" << std::fixed << std::setprecision(1) << weights[0] 
                   << ", 距離:" << weights[1] 
-                  << ", チャネル:" << weights[2] 
+                  << ", チャンネル:" << weights[2] 
                   << ", ユーザー数:" << weights[3] << "]" << std::endl;
     }
     
@@ -355,6 +401,17 @@ int main(int argc, char *argv[]) {
     uint32_t nAPs = 5;
     uint32_t nUsers = 18; // 4+2+3+4+5
     double simTime = 60.0; // 60秒
+    
+    // // AP数とユーザー数の変更候補
+    // uint32_t nAPs = 3;        // 少ないAP数
+    // uint32_t nUsers = 12;     // 対応して少ないユーザー数
+    
+    // uint32_t nAPs = 7;        // 多いAP数
+    // uint32_t nUsers = 25;     // 対応して多いユーザー数
+    
+    // // シミュレーション時間の変更候補
+    // double simTime = 30.0;    // 短時間
+    // double simTime = 120.0;   // 長時間
 
     // グローバル変数設定
     g_nAPs = nAPs;
@@ -380,12 +437,32 @@ int main(int argc, char *argv[]) {
     // WiFi設定
     WifiHelper wifi;
     wifi.SetStandard(WIFI_STANDARD_80211a);
+    // // WiFi標準の変更候補
+    // wifi.SetStandard(WIFI_STANDARD_80211n);   // 802.11n (より高速)
+    // wifi.SetStandard(WIFI_STANDARD_80211ac);  // 802.11ac (さらに高速)
+    // wifi.SetStandard(WIFI_STANDARD_80211g);   // 802.11g (古い標準)
+    
     wifi.SetRemoteStationManager("ns3::IdealWifiManager");
+    // // リモートステーションマネージャーの変更候補
+    // wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager", 
+    //                               "DataMode", StringValue("OfdmRate54Mbps"));
+    // wifi.SetRemoteStationManager("ns3::AarfWifiManager");
 
     // PHY設定
     YansWifiChannelHelper channel = YansWifiChannelHelper::Default();
+    // // チャンネルモデルの変更候補
+    // channel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
+    // channel.AddPropagationLoss("ns3::LogDistancePropagationLossModel",
+    //                           "Exponent", DoubleValue(3.0),
+    //                           "ReferenceLoss", DoubleValue(40.0));
+    
     YansWifiPhyHelper phy;
     phy.SetChannel(channel.Create());
+    // // PHYパラメータの変更候補
+    // phy.Set("TxPowerStart", DoubleValue(20.0));  // 送信電力20dBm
+    // phy.Set("TxPowerEnd", DoubleValue(20.0));
+    // phy.Set("RxGain", DoubleValue(0.0));         // 受信ゲイン
+    // phy.Set("TxGain", DoubleValue(0.0));         // 送信ゲイン
 
     // MAC設定
     WifiMacHelper mac;
@@ -409,11 +486,34 @@ int main(int argc, char *argv[]) {
 
     // AP配置（30m×30mの正方形）
     Ptr<ListPositionAllocator> apPositionAlloc = CreateObject<ListPositionAllocator>();
+    // デフォルト配置
     apPositionAlloc->Add(Vector(7.5, 7.5, 0.0));   // AP0
     apPositionAlloc->Add(Vector(22.5, 7.5, 0.0));  // AP1
     apPositionAlloc->Add(Vector(7.5, 22.5, 0.0));  // AP2
     apPositionAlloc->Add(Vector(22.5, 22.5, 0.0)); // AP3
     apPositionAlloc->Add(Vector(15.0, 15.0, 0.0)); // AP4 (中央)
+    
+    // // AP配置パターンの変更候補
+    // // 案1: 線形配置
+    // apPositionAlloc->Add(Vector(5.0, 15.0, 0.0));   // AP0
+    // apPositionAlloc->Add(Vector(10.0, 15.0, 0.0));  // AP1
+    // apPositionAlloc->Add(Vector(15.0, 15.0, 0.0));  // AP2
+    // apPositionAlloc->Add(Vector(20.0, 15.0, 0.0));  // AP3
+    // apPositionAlloc->Add(Vector(25.0, 15.0, 0.0));  // AP4
+    
+    // // 案2: より密集配置
+    // apPositionAlloc->Add(Vector(10.0, 10.0, 0.0));  // AP0
+    // apPositionAlloc->Add(Vector(20.0, 10.0, 0.0));  // AP1
+    // apPositionAlloc->Add(Vector(10.0, 20.0, 0.0));  // AP2
+    // apPositionAlloc->Add(Vector(20.0, 20.0, 0.0));  // AP3
+    // apPositionAlloc->Add(Vector(15.0, 15.0, 0.0));  // AP4 (中央)
+    
+    // // 案3: より分散配置
+    // apPositionAlloc->Add(Vector(3.0, 3.0, 0.0));    // AP0
+    // apPositionAlloc->Add(Vector(27.0, 3.0, 0.0));   // AP1
+    // apPositionAlloc->Add(Vector(3.0, 27.0, 0.0));   // AP2
+    // apPositionAlloc->Add(Vector(27.0, 27.0, 0.0));  // AP3
+    // apPositionAlloc->Add(Vector(15.0, 15.0, 0.0));  // AP4 (中央)
 
     mobility.SetPositionAllocator(apPositionAlloc);
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -422,6 +522,7 @@ int main(int argc, char *argv[]) {
     // STA配置
     Ptr<ListPositionAllocator> staPositionAlloc = CreateObject<ListPositionAllocator>();
 
+    // デフォルト配置
     // AP0接続の4端末
     staPositionAlloc->Add(Vector(5.0, 5.0, 0.0));
     staPositionAlloc->Add(Vector(10.0, 5.0, 0.0));
@@ -449,28 +550,114 @@ int main(int argc, char *argv[]) {
     staPositionAlloc->Add(Vector(12.0, 18.0, 0.0));
     staPositionAlloc->Add(Vector(18.0, 18.0, 0.0));
     staPositionAlloc->Add(Vector(15.0, 12.0, 0.0));
+    
+    // // ユーザー配置パターンの変更候補
+    // // 案1: より集中した配置
+    // // AP0周辺（より密集）
+    // staPositionAlloc->Add(Vector(6.0, 6.0, 0.0));
+    // staPositionAlloc->Add(Vector(9.0, 6.0, 0.0));
+    // staPositionAlloc->Add(Vector(6.0, 9.0, 0.0));
+    // staPositionAlloc->Add(Vector(9.0, 9.0, 0.0));
+    // // 以下同様に他のAPも密集配置...
+    
+    // // 案2: ランダム配置（UniformRandomVariableを使用）
+    // // この場合は以下のRandomWalk2dMobilityModelでカバー
 
     mobility.SetPositionAllocator(staPositionAlloc);
+    
+    // デフォルトの移動モデル
     mobility.SetMobilityModel("ns3::RandomWalk2dMobilityModel",
                               "Bounds", RectangleValue(Rectangle(0, 30, 0, 30)),
                               "Speed", StringValue("ns3::ConstantRandomVariable[Constant=1.0]"));
+    
+    // // 移動モデルの変更候補
+    // // 案1: 静止モデル（移動なし）
+    // mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+    
+    // // 案2: より速い移動
+    // mobility.SetMobilityModel("ns3::RandomWalk2dMobilityModel",
+    //                           "Bounds", RectangleValue(Rectangle(0, 30, 0, 30)),
+    //                           "Speed", StringValue("ns3::ConstantRandomVariable[Constant=3.0]"));
+    
+    // // 案3: より遅い移動
+    // mobility.SetMobilityModel("ns3::RandomWalk2dMobilityModel",
+    //                           "Bounds", RectangleValue(Rectangle(0, 30, 0, 30)),
+    //                           "Speed", StringValue("ns3::ConstantRandomVariable[Constant=0.5]"));
+    
+    // // 案4: 方向性のある移動（RandomDirection2dMobilityModel）
+    // mobility.SetMobilityModel("ns3::RandomDirection2dMobilityModel",
+    //                           "Bounds", RectangleValue(Rectangle(0, 30, 0, 30)),
+    //                           "Speed", StringValue("ns3::ConstantRandomVariable[Constant=1.0]"),
+    //                           "Pause", StringValue("ns3::ConstantRandomVariable[Constant=2.0]"));
+    
+    // // 案5: Waypoint移動モデル
+    // mobility.SetMobilityModel("ns3::RandomWaypointMobilityModel",
+    //                           "Speed", StringValue("ns3::UniformRandomVariable[Min=0.5|Max=2.0]"),
+    //                           "Pause", StringValue("ns3::ConstantRandomVariable[Constant=2.0]"),
+    //                           "PositionAllocator", PointerValue(CreateObject<RandomRectanglePositionAllocator>()));
+                              
     mobility.Install(staNodes);
 
     // AP情報の初期化
     g_apInfoList.resize(nAPs);
+    
+    // デフォルトの負荷設定
     uint32_t userCounts[] = {4, 2, 3, 4, 5}; // 各APの接続ユーザー数
-    double utilizations[] = {0.6, 0.3, 0.45, 0.8, 0.75}; // チャネル利用率
+    double utilizations[] = {0.6, 0.3, 0.45, 0.8, 0.75}; // チャンネル利用率
+    
+    // // 負荷分散の変更候補
+    // // 案1: 均等負荷
+    // uint32_t userCounts[] = {3, 3, 4, 4, 4}; 
+    // double utilizations[] = {0.5, 0.5, 0.5, 0.5, 0.5};
+    
+    // // 案2: 高負荷シナリオ
+    // uint32_t userCounts[] = {6, 4, 5, 6, 7}; 
+    // double utilizations[] = {0.9, 0.7, 0.8, 0.9, 0.95};
+    
+    // // 案3: 低負荷シナリオ
+    // uint32_t userCounts[] = {2, 1, 2, 2, 3}; 
+    // double utilizations[] = {0.2, 0.1, 0.25, 0.3, 0.35};
+    
+    // // 案4: 不均等負荷（一部APに集中）
+    // uint32_t userCounts[] = {8, 1, 1, 1, 1}; 
+    // double utilizations[] = {0.95, 0.1, 0.1, 0.1, 0.1};
     
     for (uint32_t i = 0; i < nAPs; ++i) {
         g_apInfoList[i].apId = i;
         g_apInfoList[i].position = apNodes.Get(i)->GetObject<MobilityModel>()->GetPosition();
         g_apInfoList[i].connectedUsers = userCounts[i];
         g_apInfoList[i].channelUtilization = utilizations[i];
-        g_apInfoList[i].channel = i % 3; // 3つのチャネル
+        g_apInfoList[i].channel = i % 3; // 3つのチャンネル
+        
+        // // チャンネル割り当ての変更候補
+        // g_apInfoList[i].channel = i % 2; // 2つのチャンネル（より干渉）
+        // g_apInfoList[i].channel = i;     // 各APが異なるチャンネル（干渉なし）
+        // g_apInfoList[i].channel = 0;     // 全APが同じチャンネル（最大干渉）
     }
 
     // アルゴリズム初期化
+    // デフォルト閾値
     APSelectionAlgorithm algorithm(15.0, 10.0);
+    
+    // // 閾値の変更候補
+    // // 案1: より厳しい距離閾値
+    // APSelectionAlgorithm algorithm(10.0, 10.0);
+    
+    // // 案2: より緩い距離閾値
+    // APSelectionAlgorithm algorithm(20.0, 10.0);
+    
+    // // 案3: より高いスループット要求
+    // APSelectionAlgorithm algorithm(15.0, 20.0);
+    
+    // // 案4: より低いスループット要求
+    // APSelectionAlgorithm algorithm(15.0, 5.0);
+    
+    // // 案5: 両方とも厳しい設定
+    // APSelectionAlgorithm algorithm(10.0, 20.0);
+    
+    // // 案6: 両方とも緩い設定
+    // APSelectionAlgorithm algorithm(25.0, 5.0);
+    
     algorithm.UpdateAPInfo(g_apInfoList);
     g_algorithm = &algorithm;
 
@@ -495,9 +682,31 @@ int main(int argc, char *argv[]) {
     serverApps.Stop(Seconds(simTime));
 
     UdpEchoClientHelper echoClient(apInterfaces.GetAddress(0), 9);
+    // デフォルトのトラフィック設定
     echoClient.SetAttribute("MaxPackets", UintegerValue(1000));
     echoClient.SetAttribute("Interval", TimeValue(Seconds(0.1)));
     echoClient.SetAttribute("PacketSize", UintegerValue(1024));
+    
+    // // トラフィックパターンの変更候補
+    // // 案1: 高頻度トラフィック
+    // echoClient.SetAttribute("MaxPackets", UintegerValue(2000));
+    // echoClient.SetAttribute("Interval", TimeValue(Seconds(0.05)));
+    // echoClient.SetAttribute("PacketSize", UintegerValue(1024));
+    
+    // // 案2: 低頻度トラフィック
+    // echoClient.SetAttribute("MaxPackets", UintegerValue(500));
+    // echoClient.SetAttribute("Interval", TimeValue(Seconds(0.2)));
+    // echoClient.SetAttribute("PacketSize", UintegerValue(1024));
+    
+    // // 案3: 大きなパケットサイズ
+    // echoClient.SetAttribute("MaxPackets", UintegerValue(1000));
+    // echoClient.SetAttribute("Interval", TimeValue(Seconds(0.1)));
+    // echoClient.SetAttribute("PacketSize", UintegerValue(4096));
+    
+    // // 案4: 小さなパケットサイズ
+    // echoClient.SetAttribute("MaxPackets", UintegerValue(1000));
+    // echoClient.SetAttribute("Interval", TimeValue(Seconds(0.1)));
+    // echoClient.SetAttribute("PacketSize", UintegerValue(512));
 
     ApplicationContainer clientApps = echoClient.Install(staNodes);
     clientApps.Start(Seconds(2.0));
