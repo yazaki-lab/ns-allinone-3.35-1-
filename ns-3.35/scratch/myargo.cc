@@ -52,7 +52,7 @@ struct APSelectionResult {
     std::vector<std::pair<uint32_t, double>> allScores; // 全APのスコア
 };
 
-class APSelectionAlgorithm { //AP選択アルゴリズム  
+class APSelectionAlgorithm { //AP選択アルゴリズム   
 private:
     std::vector<APInfo> m_apList;
     double m_dThreshold;  // APの距離閾値
@@ -343,8 +343,9 @@ void PrintInitialState() {
     std::cout << "\n【シミュレーション設定】" << std::endl;
     std::cout << "  AP数: " << g_nAPs << "台" << std::endl;
     std::cout << "  ユーザー数: " << g_nUsers << "台" << std::endl;
-    std::cout << "  シミュレーション時間: 60秒" << std::endl;
+    std::cout << "  シミュレーション時間: " << std::fixed << std::setprecision(0) << g_simTime << "秒" << std::endl;
     std::cout << "  シミュレーション範囲: 30m × 30m" << std::endl;
+    std::cout << "  出力ディレクトリ: " << g_outputDir << std::endl;
 
     // AP配置情報
     std::cout << "\n【AP配置情報】" << std::endl;
@@ -384,7 +385,7 @@ void PrintInitialState() {
 
     // アルゴリズム設定
     std::cout << "\n【AP選択アルゴリズム設定】" << std::endl;
-    std::cout << "  距離閾値: 15.0m" << std::endl;
+    std::cout << "  距離閾値: 25.0m" << std::endl;
     std::cout << "  最低要求スループット: 10.0Mbps" << std::endl;
     
     // 実際の重みの値を表示
@@ -496,6 +497,17 @@ int main(int argc, char *argv[]) {
     // グローバル変数設定
     g_nAPs = nAPs;
     g_nUsers = nUsers;
+    g_simTime = simTime;
+
+    // タイムスタンプ生成
+    g_timestamp = GetTimestamp();
+
+    // 結果出力ディレクトリ作成
+    g_outputDir = "results";
+    if (!CreateDirectory(g_outputDir)) {
+        std::cerr << "Failed to create output directory: " << g_outputDir << std::endl;
+        return 1;
+    }
 
     // コマンドライン引数の処理
     CommandLine cmd;
@@ -717,31 +729,11 @@ int main(int argc, char *argv[]) {
 
     // アルゴリズム初期化
     // デフォルト閾値
-    APSelectionAlgorithm algorithm(15.0, 10.0);
-    
-    // // 閾値の変更候補
-    // // 案1: より厳しい距離閾値
-    // APSelectionAlgorithm algorithm(10.0, 10.0);
-    
-    // // 案2: より緩い距離閾値
-    // APSelectionAlgorithm algorithm(20.0, 10.0);
-    
-    // // 案3: より高いスループット要求
-    // APSelectionAlgorithm algorithm(15.0, 20.0);
-    
-    // // 案4: より低いスループット要求
-    // APSelectionAlgorithm algorithm(15.0, 5.0);
-    
-    // // 案5: 両方とも厳しい設定
-    // APSelectionAlgorithm algorithm(10.0, 20.0);
-    
-    // // 案6: 両方とも緩い設定
-    // APSelectionAlgorithm algorithm(25.0, 5.0);
-    
+    APSelectionAlgorithm algorithm(15.0, 10.0);    
     algorithm.UpdateAPInfo(g_apInfoList);
     g_algorithm = &algorithm;
 
-        // 結果ファイル設定
+    // 結果ファイル設定
     std::string resultFileName = g_outputDir + "/ap_selection_results_" + g_timestamp + ".txt";
     std::string configFileName = g_outputDir + "/simulation_config_" + g_timestamp + ".txt";
     std::string animFileName = g_outputDir + "/animation_" + g_timestamp + ".xml";
@@ -821,11 +813,6 @@ int main(int argc, char *argv[]) {
     anim.UpdateNodeColor(apNodes.Get(3), 0, 255, 0);
     anim.UpdateNodeColor(apNodes.Get(4), 0, 255, 0);
 
-    // 結果ファイル設定
-    std::ofstream resultFile("ap_selection_results.txt");
-    g_resultFile = &resultFile;
-    resultFile << "Time(s)\tUserID\tPosition(x,y)\tSelectedAP\tThroughput(Mbps)" << std::endl;
-
     // シミュレーション実行
     Simulator::Stop(Seconds(simTime));
 
@@ -860,12 +847,14 @@ int main(int argc, char *argv[]) {
     }
     
     if (flowCount > 0) {
-        std::cout << "\n  平均実測スループット: " << std::setprecision(2) << (totalRealThroughput / flowCount) << " Mbps" << std::endl;
+        std::cout << "\n  実測スループット: " << std::setprecision(2) << (totalRealThroughput / flowCount) << " Mbps" << std::endl;
     }
 
     std::cout << "\n【シミュレーション完了】" << std::endl;
-    std::cout << "  結果ファイル: ap_selection_results.txt" << std::endl;
-    std::cout << "  アニメーションファイル: kamikawa-animation.xml" << std::endl;
+    std::cout << "  出力ディレクトリ: " << g_outputDir << std::endl;
+    std::cout << "  結果ファイル: " << resultFileName << std::endl;
+    std::cout << "  設定ファイル: " << configFileName << std::endl;
+    std::cout << "  アニメーションファイル: " << animFileName << std::endl;
     std::cout << std::string(80, '=') << std::endl;
 
     resultFile.close();
