@@ -342,7 +342,7 @@ int main(int argc, char *argv[]) {
 
     // WiFi設定
     WifiHelper wifi;
-    wifi.SetStandard(WIFI_STANDARD_80211n);
+    wifi.SetStandard(WIFI_STANDARD_80211a);
     wifi.SetRemoteStationManager("ns3::IdealWifiManager");
 
     // PHY設定
