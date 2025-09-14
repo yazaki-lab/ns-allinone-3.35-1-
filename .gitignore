@@ -7,6 +7,7 @@ ns-3.35/build/ns3/
 ns-3.35/build/src/
 ns-3.35/build/utils/
 ns-3.35/build/.*
+ns-3.35/build/scratch/
 ns-3.35/build/build-status.py
 ns-3.35/build/config.log
 ns-3.35/build/compile_commands.json
