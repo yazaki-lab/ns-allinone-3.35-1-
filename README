@@ -1,21 +1,21 @@
-これは ns-3-allinone です。
-
-tarball 形式でダウンロードした場合、このディレクトリには
-リリースされた ns-3 のバージョンと、Python バインディングや
-Network Animator などのオプション機能をサポートするために必要な
-サードパーティコンポーネントが含まれています。 この場合、build.py スクリプトを実行するだけで、
-すべてのコンポーネントと ns-3 本体がビルドされます。このディレクトリには、
-Network Simulation Cradle、Direct Code Execution 環境、および ns-3 用の
-click と openflow 拡張機能を含む複数の追加モジュールにアクセス可能な
-bake ビルドツールも含まれています。
-
-Mercurialからダウンロードした場合、download.pyスクリプトが
-bake、netanim、pybindgen、およびns-3-devをダウンロードします。
-基本のns-3（netanimとns-3-dev）を使用するには、次のように入力します：
-./download.py
-./build.py
-ns-3-dev ディレクトリに移動して作業を続けます。bake のドキュメントを参照して、
-bake を使用してオプションの ns-3 コンポーネントにアクセスする方法を確認してください。
+    これは ns-3-allinone です。
+    
+    tarball 形式でダウンロードした場合、このディレクトリには
+    リリースされた ns-3 のバージョンと、Python バインディングや
+    Network Animator などのオプション機能をサポートするために必要な
+    サードパーティコンポーネントが含まれています。 この場合、build.py スクリプトを実行するだけで、
+    すべてのコンポーネントと ns-3 本体がビルドされます。このディレクトリには、
+    Network Simulation Cradle、Direct Code Execution 環境、および ns-3 用の
+    click と openflow 拡張機能を含む複数の追加モジュールにアクセス可能な
+    bake ビルドツールも含まれています。
+    
+    Mercurialからダウンロードした場合、download.pyスクリプトが
+    bake、netanim、pybindgen、およびns-3-devをダウンロードします。
+    基本のns-3（netanimとns-3-dev）を使用するには、次のように入力します：
+    ./download.py
+    ./build.py
+    ns-3-dev ディレクトリに移動して作業を続けます。bake のドキュメントを参照して、
+    bake を使用してオプションの ns-3 コンポーネントにアクセスする方法を確認してください。
 
 
 実行とアニメーション実行方法（macのみ成功確認しました，参考はhttps://zenn.dev/joho0724/articles/sankaku0724-newcreate28）
