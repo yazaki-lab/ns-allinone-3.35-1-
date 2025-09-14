@@ -39,6 +39,7 @@ struct UserInfo {
     Vector position; // ユーザーの位置
     uint32_t connectedAP; // 接続中のAP
     double throughput; // ユーザーのスループット
+    bool isNew; // 新規ユーザーかどうか
 };
 
 // AP選択結果を格納する構造体
@@ -50,9 +51,10 @@ struct APSelectionResult {
     double distance;
     double score;
     std::vector<std::pair<uint32_t, double>> allScores; // 全APのスコア
+    bool isNewUser; // 新規ユーザーかどうか
 };
 
-class APSelectionAlgorithm { //AP選択アルゴリズム   
+class APSelectionAlgorithm { //AP選択アルゴリズム    
 private:
     std::vector<APInfo> m_apList;
     double m_dThreshold;  // APの距離閾値
@@ -64,28 +66,7 @@ public:
         : m_dThreshold(dTh), m_thetaThreshold(thetaTh) {
         // デフォルト重み設定
         m_weights = {0.4, 0.3, 0.2, 0.1}; // 各指標の重み  
-        
-        // 重み変更案の例
-        // // 案1：スループット最優先
-        // m_weights = {0.7, 0.1, 0.1, 0.1}; 
-
-        // // 案2：負荷分散最優先
-        // m_weights = {0.1, 0.2, 0.1, 0.6}; 
-
-        // // 案3：距離最優先
-        // m_weights = {0.2, 0.6, 0.1, 0.1}; 
-        
-        // // 案4：チャンネル利用率最優先
-        // m_weights = {0.2, 0.2, 0.5, 0.1};
-        
-        // // 案5：バランス型（均等）
-        // m_weights = {0.25, 0.25, 0.25, 0.25};
-        
-        // // 案6：スループット・距離重視
-        // m_weights = {0.5, 0.4, 0.05, 0.05};
-        
-        // // 案7：負荷分散・チャンネル重視
-        // m_weights = {0.1, 0.1, 0.4, 0.4};
+    
     }
     
     const std::vector<double>& getWeights() const { return m_weights; }
@@ -110,22 +91,6 @@ public:
         else if (distance < 20.0) return 65.0;
         else if (distance < 25.0) return 30.0;
         else return 6.5;
-        
-        // // より保守的な設定
-        // if (distance < 3.0) return 150.0;  // Mbps
-        // else if (distance < 8.0) return 100.0;
-        // else if (distance < 12.0) return 65.0;
-        // else if (distance < 18.0) return 30.0;
-        // else if (distance < 25.0) return 15.0;
-        // else return 6.5;
-        
-        // // より楽観的な設定
-        // if (distance < 8.0) return 150.0;  // Mbps
-        // else if (distance < 15.0) return 130.0;
-        // else if (distance < 22.0) return 100.0;
-        // else if (distance < 30.0) return 65.0;
-        // else if (distance < 35.0) return 30.0;
-        // else return 6.5;
     }
 
     // スループット計算（幾何平均）
@@ -142,24 +107,10 @@ public:
         sum += 1.0 / newRate;
         
         return (ap.userRates.size() + 1) / sum;
-        
-        // // 算術平均での計算
-        // double sum = 0.0;
-        // for (double rate : ap.userRates) {
-        //     sum += rate;
-        // }
-        // return (sum + newRate) / (ap.userRates.size() + 1);
-        
-        // // 最小値での計算（最悪ケース）
-        // double minRate = newRate;
-        // for (double rate : ap.userRates) {
-        //     minRate = std::min(minRate, rate);
-        // }
-        // return minRate;
     }
 
     // 最適AP選択アルゴリズム（詳細な結果を返す）
-    APSelectionResult SelectOptimalAPDetailed(const Vector& userPos, uint32_t userId) {
+    APSelectionResult SelectOptimalAPDetailed(const Vector& userPos, uint32_t userId, bool isNewUser = true) {
         APSelectionResult result;
         result.userId = userId;
         result.userPosition = userPos;
@@ -167,6 +118,7 @@ public:
         result.expectedThroughput = 0.0;
         result.distance = 0.0;
         result.score = 0.0;
+        result.isNewUser = isNewUser;
 
         std::vector<uint32_t> candidates;
 
@@ -243,7 +195,7 @@ public:
 
     // 簡単なAP選択（互換性のため）
     std::pair<uint32_t, Vector> SelectOptimalAP(const Vector& userPos) {
-        APSelectionResult result = SelectOptimalAPDetailed(userPos, 0);
+        APSelectionResult result = SelectOptimalAPDetailed(userPos, 0, true);
         return std::make_pair(result.selectedAP, Vector(0, 0, 0));
     }
 };
@@ -255,9 +207,12 @@ static NodeContainer* g_apNodes = nullptr;
 static NodeContainer* g_staNodes = nullptr;
 static uint32_t g_nAPs = 0;
 static uint32_t g_nUsers = 0;
+static uint32_t g_nExistingUsers = 0; // 既存接続済みユーザー数
+static uint32_t g_nNewUsers = 0; // 新規ユーザー数
 static double g_simTime = 0.0;
 static APSelectionAlgorithm* g_algorithm = nullptr;
 static std::vector<APInfo> g_apInfoList;
+static std::vector<UserInfo> g_userInfoList; // ユーザー情報リスト
 static std::string g_outputDir = "";
 static std::string g_timestamp = "";
 
@@ -293,7 +248,9 @@ void WriteConfigFile() {
     
     *g_configFile << "[Simulation Parameters]" << std::endl;
     *g_configFile << "Number_of_APs=" << g_nAPs << std::endl;
-    *g_configFile << "Number_of_Users=" << g_nUsers << std::endl;
+    *g_configFile << "Number_of_Total_Users=" << g_nUsers << std::endl;
+    *g_configFile << "Number_of_Existing_Users=" << g_nExistingUsers << std::endl;
+    *g_configFile << "Number_of_New_Users=" << g_nNewUsers << std::endl;
     *g_configFile << "Simulation_Time_sec=" << std::fixed << std::setprecision(1) << g_simTime << std::endl;
     *g_configFile << "Simulation_Area=30x30m" << std::endl;
     *g_configFile << "WiFi_Standard=802.11a" << std::endl;
@@ -328,6 +285,10 @@ void WriteConfigFile() {
         Vector pos = g_staNodes->Get(i)->GetObject<MobilityModel>()->GetPosition();
         *g_configFile << "User" << i << "_Initial_Position_x=" << std::fixed << std::setprecision(1) << pos.x << std::endl;
         *g_configFile << "User" << i << "_Initial_Position_y=" << pos.y << std::endl;
+        *g_configFile << "User" << i << "_Type=" << (g_userInfoList[i].isNew ? "New" : "Existing") << std::endl;
+        if (!g_userInfoList[i].isNew) {
+            *g_configFile << "User" << i << "_Initial_Connected_AP=" << g_userInfoList[i].connectedAP << std::endl;
+        }
     }
     
     g_configFile->flush();
@@ -342,7 +303,9 @@ void PrintInitialState() {
     // シミュレーション設定
     std::cout << "\n【シミュレーション設定】" << std::endl;
     std::cout << "  AP数: " << g_nAPs << "台" << std::endl;
-    std::cout << "  ユーザー数: " << g_nUsers << "台" << std::endl;
+    std::cout << "  総ユーザー数: " << g_nUsers << "台" << std::endl;
+    std::cout << "    - 既存接続済みユーザー: " << g_nExistingUsers << "台" << std::endl;
+    std::cout << "    - 新規未接続ユーザー: " << g_nNewUsers << "台" << std::endl;
     std::cout << "  シミュレーション時間: " << std::fixed << std::setprecision(0) << g_simTime << "秒" << std::endl;
     std::cout << "  シミュレーション範囲: 30m × 30m" << std::endl;
     std::cout << "  出力ディレクトリ: " << g_outputDir << std::endl;
@@ -357,29 +320,39 @@ void PrintInitialState() {
                   << ", チャンネル利用率:" << std::setprecision(1) << (g_apInfoList[i].channelUtilization * 100) << "%" << std::endl;
     }
 
-    // ユーザー初期位置
-    std::cout << "\n【ユーザー初期配置】" << std::endl;
+    // ユーザー分類表示
+    std::cout << "\n【ユーザー配置情報】" << std::endl;
+    
+    // 既存ユーザーの表示
+    std::cout << "\n  ＜既存接続済みユーザー＞" << std::endl;
     std::vector<std::vector<uint32_t>> apUsers(g_nAPs);
     
-    // 各APに接続予定のユーザーを分類
     for (uint32_t i = 0; i < g_nUsers; ++i) {
-        uint32_t expectedAP;
-        if (i < 4) expectedAP = 0;      // 最初の4台はAP0
-        else if (i < 6) expectedAP = 1; // 次の2台はAP1
-        else if (i < 9) expectedAP = 2; // 次の3台はAP2
-        else if (i < 13) expectedAP = 3; // 次の4台はAP3
-        else expectedAP = 4;            // 残りはAP4
-        
-        apUsers[expectedAP].push_back(i);
+        if (!g_userInfoList[i].isNew) {
+            apUsers[g_userInfoList[i].connectedAP].push_back(i);
+        }
     }
 
     for (uint32_t apId = 0; apId < g_nAPs; ++apId) {
-        std::cout << "  AP" << apId << "接続予定ユーザー:" << std::endl;
-        for (uint32_t userId : apUsers[apId]) {
-            Vector pos = g_staNodes->Get(userId)->GetObject<MobilityModel>()->GetPosition();
-            std::cout << "    ユーザー" << userId << ": 位置(" 
+        if (!apUsers[apId].empty()) {
+            std::cout << "    AP" << apId << "接続ユーザー:" << std::endl;
+            for (uint32_t userId : apUsers[apId]) {
+                Vector pos = g_staNodes->Get(userId)->GetObject<MobilityModel>()->GetPosition();
+                std::cout << "      ユーザー" << userId << ": 位置(" 
+                          << std::fixed << std::setprecision(1)
+                          << pos.x << "m, " << pos.y << "m)" << std::endl;
+            }
+        }
+    }
+    
+    // 新規ユーザーの表示
+    std::cout << "\n  ＜新規未接続ユーザー（AP選択対象）＞" << std::endl;
+    for (uint32_t i = 0; i < g_nUsers; ++i) {
+        if (g_userInfoList[i].isNew) {
+            Vector pos = g_staNodes->Get(i)->GetObject<MobilityModel>()->GetPosition();
+            std::cout << "    ユーザー" << i << ": 位置(" 
                       << std::fixed << std::setprecision(1)
-                      << pos.x << "m, " << pos.y << "m)" << std::endl;
+                      << pos.x << "m, " << pos.y << "m) [未接続]" << std::endl;
         }
     }
 
@@ -410,67 +383,116 @@ void PrintAPSelectionResults() {
 
     std::vector<APSelectionResult> results;
     
+    // 新規ユーザーのみAP選択を実行
     for (uint32_t i = 0; i < g_nUsers; ++i) {
         Ptr<MobilityModel> mobility = g_staNodes->Get(i)->GetObject<MobilityModel>();
         Vector pos = mobility->GetPosition();
 
-        APSelectionResult result = g_algorithm->SelectOptimalAPDetailed(pos, i);
-        results.push_back(result);
-        
-        // ファイルにも出力（元の形式を維持）
-        *g_resultFile << "5.0\t" << i << "\t(" << pos.x << "," << pos.y << ")\t" 
-                     << result.selectedAP << "\t" << result.expectedThroughput << std::endl;
+        if (g_userInfoList[i].isNew) {
+            // 新規ユーザーのAP選択
+            APSelectionResult result = g_algorithm->SelectOptimalAPDetailed(pos, i, true);
+            results.push_back(result);
+            
+            // ファイルにも出力
+            *g_resultFile << "5.0\t" << i << "\t(" << pos.x << "," << pos.y << ")\t" 
+                         << result.selectedAP << "\t" << result.expectedThroughput << "\tNew" << std::endl;
+        } else {
+            // 既存ユーザーは現在の接続を維持
+            APSelectionResult result;
+            result.userId = i;
+            result.userPosition = pos;
+            result.selectedAP = g_userInfoList[i].connectedAP;
+            result.isNewUser = false;
+            
+            // 既存ユーザーの期待スループットも計算
+            Vector apPos = g_apNodes->Get(result.selectedAP)->GetObject<MobilityModel>()->GetPosition();
+            result.distance = g_algorithm->CalculateDistance(pos, apPos);
+            double rate = g_algorithm->CalculateTransmissionRate(pos, apPos);
+            result.expectedThroughput = g_algorithm->CalculateThroughput(g_apInfoList[result.selectedAP], rate);
+            
+            *g_resultFile << "5.0\t" << i << "\t(" << pos.x << "," << pos.y << ")\t" 
+                         << result.selectedAP << "\t" << result.expectedThroughput << "\tExisting" << std::endl;
+        }
     }
 
-    // ユーザーごとの詳細結果表示
-    std::cout << "\n【各ユーザーのAP選択結果】" << std::endl;
+    // 新規ユーザーの詳細結果表示
+    std::cout << "\n【新規ユーザーのAP選択結果】" << std::endl;
     for (const auto& result : results) {
-        std::cout << "\n--- ユーザー" << result.userId << " ---" << std::endl;
-        std::cout << "  現在位置: (" << std::fixed << std::setprecision(1) 
-                  << result.userPosition.x << "m, " << result.userPosition.y << "m)" << std::endl;
-        std::cout << "  選択されたAP: AP" << result.selectedAP << std::endl;
-        std::cout << "  APまでの距離: " << std::setprecision(1) << result.distance << "m" << std::endl;
-        std::cout << "  予想スループット: " << std::setprecision(1) << result.expectedThroughput << "Mbps" << std::endl;
-        std::cout << "  総合スコア: " << std::setprecision(3) << result.score << std::endl;
-        
-        // 全APのスコア表示
-        std::cout << "  各APスコア詳細:" << std::endl;
-        for (const auto& score : result.allScores) {
-            Vector apPos = g_apNodes->Get(score.first)->GetObject<MobilityModel>()->GetPosition();
-            double dist = sqrt(pow(result.userPosition.x - apPos.x, 2) + 
-                             pow(result.userPosition.y - apPos.y, 2));
-            std::cout << "    AP" << score.first << ": スコア=" << std::setprecision(3) << score.second
-                      << " (距離:" << std::setprecision(1) << dist << "m)" << std::endl;
+        if (result.isNewUser) {
+            std::cout << "\n--- ユーザー" << result.userId << " （新規）---" << std::endl;
+            std::cout << "  現在位置: (" << std::fixed << std::setprecision(1) 
+                      << result.userPosition.x << "m, " << result.userPosition.y << "m)" << std::endl;
+            std::cout << "  選択されたAP: AP" << result.selectedAP << std::endl;
+            std::cout << "  APまでの距離: " << std::setprecision(1) << result.distance << "m" << std::endl;
+            std::cout << "  予想スループット: " << std::setprecision(1) << result.expectedThroughput << "Mbps" << std::endl;
+            std::cout << "  総合スコア: " << std::setprecision(3) << result.score << std::endl;
+            
+            // 全APのスコア表示
+            std::cout << "  各APスコア詳細:" << std::endl;
+            for (const auto& score : result.allScores) {
+                Vector apPos = g_apNodes->Get(score.first)->GetObject<MobilityModel>()->GetPosition();
+                double dist = sqrt(pow(result.userPosition.x - apPos.x, 2) + 
+                                 pow(result.userPosition.y - apPos.y, 2));
+                std::cout << "    AP" << score.first << ": スコア=" << std::setprecision(3) << score.second
+                          << " (距離:" << std::setprecision(1) << dist << "m)" << std::endl;
+            }
         }
     }
 
     // 統計情報
     std::cout << "\n【AP選択統計】" << std::endl;
     std::map<uint32_t, uint32_t> apSelectionCount;
+    std::map<uint32_t, uint32_t> apNewUserCount;
+    
     for (uint32_t i = 0; i < g_nAPs; ++i) {
         apSelectionCount[i] = 0;
+        apNewUserCount[i] = 0;
     }
     
-    for (const auto& result : results) {
-        apSelectionCount[result.selectedAP]++;
+    // 既存ユーザーと新規ユーザーの分布をカウント
+    for (uint32_t i = 0; i < g_nUsers; ++i) {
+        if (g_userInfoList[i].isNew) {
+            // 新規ユーザーは選択されたAPをカウント
+            for (const auto& result : results) {
+                if (result.userId == i) {
+                    apSelectionCount[result.selectedAP]++;
+                    apNewUserCount[result.selectedAP]++;
+                    break;
+                }
+            }
+        } else {
+            // 既存ユーザーは元の接続APをカウント
+            apSelectionCount[g_userInfoList[i].connectedAP]++;
+        }
     }
 
     for (uint32_t i = 0; i < g_nAPs; ++i) {
         double percentage = (double)apSelectionCount[i] / g_nUsers * 100.0;
-        std::cout << "  AP" << i << ": " << apSelectionCount[i] << "ユーザー選択 ("
-                  << std::fixed << std::setprecision(1) << percentage << "%)" << std::endl;
+        std::cout << "  AP" << i << ": " << apSelectionCount[i] << "ユーザー合計 ("
+                  << std::fixed << std::setprecision(1) << percentage << "%) "
+                  << "[既存:" << (apSelectionCount[i] - apNewUserCount[i]) 
+                  << ", 新規:" << apNewUserCount[i] << "]" << std::endl;
     }
 
-    // 平均距離とスループット
+    // 平均距離とスループット（新規ユーザーのみ）
     double totalDistance = 0.0, totalThroughput = 0.0;
+    uint32_t newUserCount = 0;
+    
     for (const auto& result : results) {
-        totalDistance += result.distance;
-        totalThroughput += result.expectedThroughput;
+        if (result.isNewUser) {
+            totalDistance += result.distance;
+            totalThroughput += result.expectedThroughput;
+            newUserCount++;
+        }
     }
     
-    std::cout << "\n【性能指標】" << std::endl;
-    std::cout << "  平均AP距離: " << std::setprecision(1) << (totalDistance / g_nUsers) << "m" << std::endl;
-    std::cout << "  平均予想スループット: " << std::setprecision(1) << (totalThroughput / g_nUsers) << "Mbps" << std::endl;
+    std::cout << "\n【新規ユーザー性能指標】" << std::endl;
+    if (newUserCount > 0) {
+        std::cout << "  平均AP距離: " << std::setprecision(1) << (totalDistance / newUserCount) << "m" << std::endl;
+        std::cout << "  平均予想スループット: " << std::setprecision(1) << (totalThroughput / newUserCount) << "Mbps" << std::endl;
+    } else {
+        std::cout << "  新規ユーザーが存在しません" << std::endl;
+    }
 
     std::cout << std::string(80, '=') << std::endl;
     
@@ -480,23 +502,16 @@ void PrintAPSelectionResults() {
 int main(int argc, char *argv[]) {
     // パラメータ設定
     uint32_t nAPs = 5;
-    uint32_t nUsers = 18; // 4+2+3+4+5
+    uint32_t nExistingUsers = 13; // 既存接続済みユーザー (4+2+3+4+0)
+    uint32_t nNewUsers = 5; // 新規未接続ユーザー
+    uint32_t nUsers = nExistingUsers + nNewUsers; // 総ユーザー数
     double simTime = 60.0; // 60秒
     
-    // // AP数とユーザー数の変更候補
-    // uint32_t nAPs = 3;        // 少ないAP数
-    // uint32_t nUsers = 12;     // 対応して少ないユーザー数
-    
-    // uint32_t nAPs = 7;        // 多いAP数
-    // uint32_t nUsers = 25;     // 対応して多いユーザー数
-    
-    // // シミュレーション時間の変更候補
-    // double simTime = 30.0;    // 短時間
-    // double simTime = 120.0;   // 長時間
-
     // グローバル変数設定
     g_nAPs = nAPs;
     g_nUsers = nUsers;
+    g_nExistingUsers = nExistingUsers;
+    g_nNewUsers = nNewUsers;
     g_simTime = simTime;
 
     // タイムスタンプ生成
@@ -529,32 +544,12 @@ int main(int argc, char *argv[]) {
     // WiFi設定
     WifiHelper wifi;
     wifi.SetStandard(WIFI_STANDARD_80211a);
-    // // WiFi標準の変更候補
-    // wifi.SetStandard(WIFI_STANDARD_80211n);   // 802.11n (より高速)
-    // wifi.SetStandard(WIFI_STANDARD_80211ac);  // 802.11ac (さらに高速)
-    // wifi.SetStandard(WIFI_STANDARD_80211g);   // 802.11g (古い標準)
-    
     wifi.SetRemoteStationManager("ns3::IdealWifiManager");
-    // // リモートステーションマネージャーの変更候補
-    // wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager", 
-    //                               "DataMode", StringValue("OfdmRate54Mbps"));
-    // wifi.SetRemoteStationManager("ns3::AarfWifiManager");
 
     // PHY設定
     YansWifiChannelHelper channel = YansWifiChannelHelper::Default();
-    // // チャンネルモデルの変更候補
-    // channel.SetPropagationDelay("ns3::ConstantSpeedPropagationDelayModel");
-    // channel.AddPropagationLoss("ns3::LogDistancePropagationLossModel",
-    //                           "Exponent", DoubleValue(3.0),
-    //                           "ReferenceLoss", DoubleValue(40.0));
-    
     YansWifiPhyHelper phy;
     phy.SetChannel(channel.Create());
-    // // PHYパラメータの変更候補
-    // phy.Set("TxPowerStart", DoubleValue(20.0));  // 送信電力20dBm
-    // phy.Set("TxPowerEnd", DoubleValue(20.0));
-    // phy.Set("RxGain", DoubleValue(0.0));         // 受信ゲイン
-    // phy.Set("TxGain", DoubleValue(0.0));         // 送信ゲイン
 
     // MAC設定
     WifiMacHelper mac;
@@ -578,34 +573,11 @@ int main(int argc, char *argv[]) {
 
     // AP配置（30m×30mの正方形）
     Ptr<ListPositionAllocator> apPositionAlloc = CreateObject<ListPositionAllocator>();
-    // デフォルト配置
     apPositionAlloc->Add(Vector(7.5, 7.5, 0.0));   // AP0
     apPositionAlloc->Add(Vector(22.5, 7.5, 0.0));  // AP1
     apPositionAlloc->Add(Vector(7.5, 22.5, 0.0));  // AP2
     apPositionAlloc->Add(Vector(22.5, 22.5, 0.0)); // AP3
     apPositionAlloc->Add(Vector(15.0, 15.0, 0.0)); // AP4 (中央)
-    
-    // // AP配置パターンの変更候補
-    // // 案1: 線形配置
-    // apPositionAlloc->Add(Vector(5.0, 15.0, 0.0));   // AP0
-    // apPositionAlloc->Add(Vector(10.0, 15.0, 0.0));  // AP1
-    // apPositionAlloc->Add(Vector(15.0, 15.0, 0.0));  // AP2
-    // apPositionAlloc->Add(Vector(20.0, 15.0, 0.0));  // AP3
-    // apPositionAlloc->Add(Vector(25.0, 15.0, 0.0));  // AP4
-    
-    // // 案2: より密集配置
-    // apPositionAlloc->Add(Vector(10.0, 10.0, 0.0));  // AP0
-    // apPositionAlloc->Add(Vector(20.0, 10.0, 0.0));  // AP1
-    // apPositionAlloc->Add(Vector(10.0, 20.0, 0.0));  // AP2
-    // apPositionAlloc->Add(Vector(20.0, 20.0, 0.0));  // AP3
-    // apPositionAlloc->Add(Vector(15.0, 15.0, 0.0));  // AP4 (中央)
-    
-    // // 案3: より分散配置
-    // apPositionAlloc->Add(Vector(3.0, 3.0, 0.0));    // AP0
-    // apPositionAlloc->Add(Vector(27.0, 3.0, 0.0));   // AP1
-    // apPositionAlloc->Add(Vector(3.0, 27.0, 0.0));   // AP2
-    // apPositionAlloc->Add(Vector(27.0, 27.0, 0.0));  // AP3
-    // apPositionAlloc->Add(Vector(15.0, 15.0, 0.0));  // AP4 (中央)
 
     mobility.SetPositionAllocator(apPositionAlloc);
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -614,7 +586,7 @@ int main(int argc, char *argv[]) {
     // STA配置
     Ptr<ListPositionAllocator> staPositionAlloc = CreateObject<ListPositionAllocator>();
 
-    // デフォルト配置
+    // 既存ユーザーの配置（各APに接続済み）
     // AP0接続の4端末
     staPositionAlloc->Add(Vector(5.0, 5.0, 0.0));
     staPositionAlloc->Add(Vector(10.0, 5.0, 0.0));
@@ -636,83 +608,71 @@ int main(int argc, char *argv[]) {
     staPositionAlloc->Add(Vector(20.0, 25.0, 0.0));
     staPositionAlloc->Add(Vector(25.0, 25.0, 0.0));
 
-    // AP4接続の5端末
-    staPositionAlloc->Add(Vector(12.0, 12.0, 0.0));
-    staPositionAlloc->Add(Vector(18.0, 12.0, 0.0));
-    staPositionAlloc->Add(Vector(12.0, 18.0, 0.0));
-    staPositionAlloc->Add(Vector(18.0, 18.0, 0.0));
-    staPositionAlloc->Add(Vector(15.0, 12.0, 0.0));
-    
-    // // ユーザー配置パターンの変更候補
-    // // 案1: より集中した配置
-    // // AP0周辺（より密集）
-    // staPositionAlloc->Add(Vector(6.0, 6.0, 0.0));
-    // staPositionAlloc->Add(Vector(9.0, 6.0, 0.0));
-    // staPositionAlloc->Add(Vector(6.0, 9.0, 0.0));
-    // staPositionAlloc->Add(Vector(9.0, 9.0, 0.0));
-    // // 以下同様に他のAPも密集配置...
-    
-    // // 案2: ランダム配置（UniformRandomVariableを使用）
-    // // この場合は以下のRandomWalk2dMobilityModelでカバー
+    // 新規ユーザーの配置（まだどこにも接続していない）
+    // シミュレーション領域内にランダムまたは特定位置に配置
+    staPositionAlloc->Add(Vector(12.0, 8.0, 0.0));   // 新規ユーザー1
+    staPositionAlloc->Add(Vector(18.0, 12.0, 0.0));  // 新規ユーザー2
+    staPositionAlloc->Add(Vector(8.0, 18.0, 0.0));   // 新規ユーザー3
+    staPositionAlloc->Add(Vector(22.0, 15.0, 0.0));  // 新規ユーザー4
+    staPositionAlloc->Add(Vector(15.0, 25.0, 0.0));  // 新規ユーザー5
 
     mobility.SetPositionAllocator(staPositionAlloc);
-    
-    // デフォルトの移動モデル
     mobility.SetMobilityModel("ns3::RandomWalk2dMobilityModel",
                               "Bounds", RectangleValue(Rectangle(0, 30, 0, 30)),
                               "Speed", StringValue("ns3::ConstantRandomVariable[Constant=1.0]"));
-    
-    // // 移動モデルの変更候補
-    // // 案1: 静止モデル（移動なし）
-    // mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-    
-    // // 案2: より速い移動
-    // mobility.SetMobilityModel("ns3::RandomWalk2dMobilityModel",
-    //                           "Bounds", RectangleValue(Rectangle(0, 30, 0, 30)),
-    //                           "Speed", StringValue("ns3::ConstantRandomVariable[Constant=3.0]"));
-    
-    // // 案3: より遅い移動
-    // mobility.SetMobilityModel("ns3::RandomWalk2dMobilityModel",
-    //                           "Bounds", RectangleValue(Rectangle(0, 30, 0, 30)),
-    //                           "Speed", StringValue("ns3::ConstantRandomVariable[Constant=0.5]"));
-    
-    // // 案4: 方向性のある移動（RandomDirection2dMobilityModel）
-    // mobility.SetMobilityModel("ns3::RandomDirection2dMobilityModel",
-    //                           "Bounds", RectangleValue(Rectangle(0, 30, 0, 30)),
-    //                           "Speed", StringValue("ns3::ConstantRandomVariable[Constant=1.0]"),
-    //                           "Pause", StringValue("ns3::ConstantRandomVariable[Constant=2.0]"));
-    
-    // // 案5: Waypoint移動モデル
-    // mobility.SetMobilityModel("ns3::RandomWaypointMobilityModel",
-    //                           "Speed", StringValue("ns3::UniformRandomVariable[Min=0.5|Max=2.0]"),
-    //                           "Pause", StringValue("ns3::ConstantRandomVariable[Constant=2.0]"),
-    //                           "PositionAllocator", PointerValue(CreateObject<RandomRectanglePositionAllocator>()));
-                              
     mobility.Install(staNodes);
+
+    // ユーザー情報の初期化
+    g_userInfoList.resize(nUsers);
+    
+    // 既存ユーザーの設定
+    uint32_t userIndex = 0;
+    // AP0接続ユーザー（4名）
+    for (uint32_t i = 0; i < 4; ++i, ++userIndex) {
+        g_userInfoList[userIndex].userId = userIndex;
+        g_userInfoList[userIndex].connectedAP = 0;
+        g_userInfoList[userIndex].isNew = false;
+        g_userInfoList[userIndex].position = staNodes.Get(userIndex)->GetObject<MobilityModel>()->GetPosition();
+    }
+    
+    // AP1接続ユーザー（2名）
+    for (uint32_t i = 0; i < 2; ++i, ++userIndex) {
+        g_userInfoList[userIndex].userId = userIndex;
+        g_userInfoList[userIndex].connectedAP = 1;
+        g_userInfoList[userIndex].isNew = false;
+        g_userInfoList[userIndex].position = staNodes.Get(userIndex)->GetObject<MobilityModel>()->GetPosition();
+    }
+    
+    // AP2接続ユーザー（3名）
+    for (uint32_t i = 0; i < 3; ++i, ++userIndex) {
+        g_userInfoList[userIndex].userId = userIndex;
+        g_userInfoList[userIndex].connectedAP = 2;
+        g_userInfoList[userIndex].isNew = false;
+        g_userInfoList[userIndex].position = staNodes.Get(userIndex)->GetObject<MobilityModel>()->GetPosition();
+    }
+    
+    // AP3接続ユーザー（4名）
+    for (uint32_t i = 0; i < 4; ++i, ++userIndex) {
+        g_userInfoList[userIndex].userId = userIndex;
+        g_userInfoList[userIndex].connectedAP = 3;
+        g_userInfoList[userIndex].isNew = false;
+        g_userInfoList[userIndex].position = staNodes.Get(userIndex)->GetObject<MobilityModel>()->GetPosition();
+    }
+    
+    // 新規ユーザーの設定（AP4には最初誰も接続していない）
+    for (uint32_t i = 0; i < nNewUsers; ++i, ++userIndex) {
+        g_userInfoList[userIndex].userId = userIndex;
+        g_userInfoList[userIndex].connectedAP = 0; // 初期値、実際は未接続
+        g_userInfoList[userIndex].isNew = true;
+        g_userInfoList[userIndex].position = staNodes.Get(userIndex)->GetObject<MobilityModel>()->GetPosition();
+    }
 
     // AP情報の初期化
     g_apInfoList.resize(nAPs);
     
-    // デフォルトの負荷設定
-    uint32_t userCounts[] = {4, 2, 3, 4, 5}; // 各APの接続ユーザー数
-    double utilizations[] = {0.6, 0.3, 0.45, 0.8, 0.75}; // チャンネル利用率
-    
-    // // 負荷分散の変更候補
-    // // 案1: 均等負荷
-    // uint32_t userCounts[] = {3, 3, 4, 4, 4}; 
-    // double utilizations[] = {0.5, 0.5, 0.5, 0.5, 0.5};
-    
-    // // 案2: 高負荷シナリオ
-    // uint32_t userCounts[] = {6, 4, 5, 6, 7}; 
-    // double utilizations[] = {0.9, 0.7, 0.8, 0.9, 0.95};
-    
-    // // 案3: 低負荷シナリオ
-    // uint32_t userCounts[] = {2, 1, 2, 2, 3}; 
-    // double utilizations[] = {0.2, 0.1, 0.25, 0.3, 0.35};
-    
-    // // 案4: 不均等負荷（一部APに集中）
-    // uint32_t userCounts[] = {8, 1, 1, 1, 1}; 
-    // double utilizations[] = {0.95, 0.1, 0.1, 0.1, 0.1};
+    // 既存ユーザーの負荷を反映したAP情報設定
+    uint32_t userCounts[] = {4, 2, 3, 4, 0}; // 各APの既存接続ユーザー数
+    double utilizations[] = {0.6, 0.3, 0.45, 0.8, 0.0}; // チャンネル利用率
     
     for (uint32_t i = 0; i < nAPs; ++i) {
         g_apInfoList[i].apId = i;
@@ -720,16 +680,10 @@ int main(int argc, char *argv[]) {
         g_apInfoList[i].connectedUsers = userCounts[i];
         g_apInfoList[i].channelUtilization = utilizations[i];
         g_apInfoList[i].channel = i % 3; // 3つのチャンネル
-        
-        // // チャンネル割り当ての変更候補
-        // g_apInfoList[i].channel = i % 2; // 2つのチャンネル（より干渉）
-        // g_apInfoList[i].channel = i;     // 各APが異なるチャンネル（干渉なし）
-        // g_apInfoList[i].channel = 0;     // 全APが同じチャンネル（最大干渉）
     }
 
     // アルゴリズム初期化
-    // デフォルト閾値
-    APSelectionAlgorithm algorithm(15.0, 10.0);    
+    APSelectionAlgorithm algorithm(25.0, 10.0);    // 距離閾値25m, 最低スループット10Mbps
     algorithm.UpdateAPInfo(g_apInfoList);
     g_algorithm = &algorithm;
 
@@ -747,8 +701,7 @@ int main(int argc, char *argv[]) {
     WriteConfigFile();
     configFile.close();
 
-    resultFile << "Time(s)\tUserID\tPosition(x,y)\tSelectedAP\tThroughput(Mbps)" << std::endl;
-
+    resultFile << "Time(s)\tUserID\tPosition(x,y)\tSelectedAP\tThroughput(Mbps)\tUserType" << std::endl;
 
     // 初期状態表示
     PrintInitialState();
@@ -771,31 +724,9 @@ int main(int argc, char *argv[]) {
     serverApps.Stop(Seconds(simTime));
 
     UdpEchoClientHelper echoClient(apInterfaces.GetAddress(0), 9);
-    // デフォルトのトラフィック設定
     echoClient.SetAttribute("MaxPackets", UintegerValue(1000));
     echoClient.SetAttribute("Interval", TimeValue(Seconds(0.1)));
     echoClient.SetAttribute("PacketSize", UintegerValue(1024));
-    
-    // // トラフィックパターンの変更候補
-    // // 案1: 高頻度トラフィック
-    // echoClient.SetAttribute("MaxPackets", UintegerValue(2000));
-    // echoClient.SetAttribute("Interval", TimeValue(Seconds(0.05)));
-    // echoClient.SetAttribute("PacketSize", UintegerValue(1024));
-    
-    // // 案2: 低頻度トラフィック
-    // echoClient.SetAttribute("MaxPackets", UintegerValue(500));
-    // echoClient.SetAttribute("Interval", TimeValue(Seconds(0.2)));
-    // echoClient.SetAttribute("PacketSize", UintegerValue(1024));
-    
-    // // 案3: 大きなパケットサイズ
-    // echoClient.SetAttribute("MaxPackets", UintegerValue(1000));
-    // echoClient.SetAttribute("Interval", TimeValue(Seconds(0.1)));
-    // echoClient.SetAttribute("PacketSize", UintegerValue(4096));
-    
-    // // 案4: 小さなパケットサイズ
-    // echoClient.SetAttribute("MaxPackets", UintegerValue(1000));
-    // echoClient.SetAttribute("Interval", TimeValue(Seconds(0.1)));
-    // echoClient.SetAttribute("PacketSize", UintegerValue(512));
 
     ApplicationContainer clientApps = echoClient.Install(staNodes);
     clientApps.Start(Seconds(2.0));
@@ -807,11 +738,19 @@ int main(int argc, char *argv[]) {
 
     // NetAnim設定
     AnimationInterface anim(animFileName);
-    anim.UpdateNodeColor(apNodes.Get(0), 0, 255, 0);
-    anim.UpdateNodeColor(apNodes.Get(1), 0, 255, 0);
-    anim.UpdateNodeColor(apNodes.Get(2), 0, 255, 0);
-    anim.UpdateNodeColor(apNodes.Get(3), 0, 255, 0);
-    anim.UpdateNodeColor(apNodes.Get(4), 0, 255, 0);
+    // APを緑色で表示
+    for (uint32_t i = 0; i < nAPs; ++i) {
+        anim.UpdateNodeColor(apNodes.Get(i), 0, 255, 0);
+    }
+    
+    // 既存ユーザーを青色、新規ユーザーを赤色で表示
+    for (uint32_t i = 0; i < nUsers; ++i) {
+        if (g_userInfoList[i].isNew) {
+            anim.UpdateNodeColor(staNodes.Get(i), 255, 0, 0); // 新規ユーザー：赤
+        } else {
+            anim.UpdateNodeColor(staNodes.Get(i), 0, 0, 255); // 既存ユーザー：青
+        }
+    }
 
     // シミュレーション実行
     Simulator::Stop(Seconds(simTime));
