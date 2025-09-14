@@ -436,6 +436,7 @@ int main(int argc, char *argv[]) {
 
     // NetAnim設定
     AnimationInterface anim("simple-kamikawa-animation.xml");
+    anim.UpdateNodeColor(apNodes.Get(0), 0, 255, 0);
 
     // 結果ファイル設定
     std::ofstream resultFile("simple_ap_selection_results.txt");
