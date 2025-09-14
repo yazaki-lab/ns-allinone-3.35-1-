@@ -5,6 +5,10 @@
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <sstream>
+#include <ctime>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
@@ -48,7 +52,7 @@ struct APSelectionResult {
     std::vector<std::pair<uint32_t, double>> allScores; // 全APのスコア
 };
 
-class APSelectionAlgorithm { //AP選択アルゴリズム  
+class APSelectionAlgorithm { //AP選択アルゴリズム   
 private:
     std::vector<APInfo> m_apList;
     double m_dThreshold;  // APの距離閾値
@@ -193,12 +197,88 @@ public:
 
 // グローバル変数
 static std::ofstream* g_resultFile = nullptr;
+static std::ofstream* g_configFile = nullptr;
 static NodeContainer* g_apNodes = nullptr;
 static NodeContainer* g_staNodes = nullptr;
 static uint32_t g_nAPs = 0;
 static uint32_t g_nUsers = 0;
+static double g_simTime = 0.0;
 static APSelectionAlgorithm* g_algorithm = nullptr;
 static std::vector<APInfo> g_apInfoList;
+static std::string g_outputDir = "";
+static std::string g_timestamp = "";
+
+// タイムスタンプ文字列を生成する関数
+std::string GetTimestamp() {
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[80];
+
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+
+    strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", timeinfo);
+    return std::string(buffer);
+}
+
+// ディレクトリを作成する関数
+bool CreateDirectory(const std::string& path) {
+#ifdef _WIN32
+    return _mkdir(path.c_str()) == 0 || errno == EEXIST;
+#else
+    return mkdir(path.c_str(), 0777) == 0 || errno == EEXIST;
+#endif
+}
+
+// 設定情報をファイルに出力する関数
+void WriteConfigFile() {
+    if (!g_configFile) return;
+    
+    *g_configFile << "# WiFi AP Selection Simulation Configuration" << std::endl;
+    *g_configFile << "# Generated on: " << g_timestamp << std::endl;
+    *g_configFile << std::endl;
+    
+    *g_configFile << "[Simulation Parameters]" << std::endl;
+    *g_configFile << "Number_of_APs=" << g_nAPs << std::endl;
+    *g_configFile << "Number_of_Users=" << g_nUsers << std::endl;
+    *g_configFile << "Simulation_Time_sec=" << std::fixed << std::setprecision(1) << g_simTime << std::endl;
+    *g_configFile << "Simulation_Area=30x30m" << std::endl;
+    *g_configFile << "WiFi_Standard=802.11a" << std::endl;
+    *g_configFile << std::endl;
+    
+    *g_configFile << "[AP Selection Algorithm Parameters]" << std::endl;
+    *g_configFile << "Distance_Threshold_m=25.0" << std::endl;
+    *g_configFile << "Min_Required_Throughput_Mbps=10.0" << std::endl;
+    
+    if (g_algorithm) {
+        const std::vector<double>& weights = g_algorithm->getWeights();
+        *g_configFile << "Weight_Throughput=" << std::fixed << std::setprecision(1) << weights[0] << std::endl;
+        *g_configFile << "Weight_Distance=" << weights[1] << std::endl;
+        *g_configFile << "Weight_Channel=" << weights[2] << std::endl;
+        *g_configFile << "Weight_Users=" << weights[3] << std::endl;
+    }
+    *g_configFile << std::endl;
+    
+    *g_configFile << "[AP Configuration]" << std::endl;
+    for (uint32_t i = 0; i < g_nAPs; ++i) {
+        Vector pos = g_apNodes->Get(i)->GetObject<MobilityModel>()->GetPosition();
+        *g_configFile << "AP" << i << "_Position_x=" << std::fixed << std::setprecision(1) << pos.x << std::endl;
+        *g_configFile << "AP" << i << "_Position_y=" << pos.y << std::endl;
+        *g_configFile << "AP" << i << "_Connected_Users=" << g_apInfoList[i].connectedUsers << std::endl;
+        *g_configFile << "AP" << i << "_Channel_Utilization=" << std::setprecision(3) << g_apInfoList[i].channelUtilization << std::endl;
+        *g_configFile << "AP" << i << "_Channel=" << g_apInfoList[i].channel << std::endl;
+    }
+    *g_configFile << std::endl;
+    
+    *g_configFile << "[User Initial Configuration]" << std::endl;
+    for (uint32_t i = 0; i < g_nUsers; ++i) {
+        Vector pos = g_staNodes->Get(i)->GetObject<MobilityModel>()->GetPosition();
+        *g_configFile << "User" << i << "_Initial_Position_x=" << std::fixed << std::setprecision(1) << pos.x << std::endl;
+        *g_configFile << "User" << i << "_Initial_Position_y=" << pos.y << std::endl;
+    }
+    
+    g_configFile->flush();
+}
 
 // 初期状態の表示
 void PrintInitialState() {
@@ -210,8 +290,9 @@ void PrintInitialState() {
     std::cout << "\n【シミュレーション設定】" << std::endl;
     std::cout << "  AP数: " << g_nAPs << "台" << std::endl;
     std::cout << "  ユーザー数: " << g_nUsers << "台" << std::endl;
-    std::cout << "  シミュレーション時間: 60秒" << std::endl;
+    std::cout << "  シミュレーション時間: " << std::fixed << std::setprecision(0) << g_simTime << "秒" << std::endl;
     std::cout << "  シミュレーション範囲: 30m × 30m" << std::endl;
+    std::cout << "  出力ディレクトリ: " << g_outputDir << std::endl;
 
     // AP配置情報
     std::cout << "\n【AP配置情報】" << std::endl;
@@ -322,6 +403,17 @@ int main(int argc, char *argv[]) {
     // グローバル変数設定
     g_nAPs = nAPs;
     g_nUsers = nUsers;
+    g_simTime = simTime;
+
+    // タイムスタンプ生成
+    g_timestamp = GetTimestamp();
+
+    // 結果出力ディレクトリ作成
+    g_outputDir = "results";
+    if (!CreateDirectory(g_outputDir)) {
+        std::cerr << "Failed to create output directory: " << g_outputDir << std::endl;
+        return 1;
+    }
 
     // コマンドライン引数の処理
     CommandLine cmd;
@@ -401,6 +493,22 @@ int main(int argc, char *argv[]) {
     algorithm.UpdateAPInfo(g_apInfoList);
     g_algorithm = &algorithm;
 
+    // 結果ファイル設定
+    std::string resultFileName = g_outputDir + "/ap_selection_results_" + g_timestamp + ".txt";
+    std::string configFileName = g_outputDir + "/simulation_config_" + g_timestamp + ".txt";
+    std::string animFileName = g_outputDir + "/animation_" + g_timestamp + ".xml";
+
+    std::ofstream resultFile(resultFileName);
+    std::ofstream configFile(configFileName);
+    g_resultFile = &resultFile;
+    g_configFile = &configFile;
+
+    // 設定ファイル書き込み
+    WriteConfigFile();
+    configFile.close();
+
+    resultFile << "Time(s)\tUserID\tPosition(x,y)\tSelectedAP\tThroughput(Mbps)" << std::endl;
+
     // 初期状態表示
     PrintInitialState();
 
@@ -435,13 +543,8 @@ int main(int argc, char *argv[]) {
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
 
     // NetAnim設定
-    AnimationInterface anim("simple-kamikawa-animation.xml");
+    AnimationInterface anim(animFileName);
     anim.UpdateNodeColor(apNodes.Get(0), 0, 255, 0);
-
-    // 結果ファイル設定
-    std::ofstream resultFile("simple_ap_selection_results.txt");
-    g_resultFile = &resultFile;
-    resultFile << "Time(s)\tUserID\tPosition(x,y)\tSelectedAP\tThroughput(Mbps)" << std::endl;
 
     // シミュレーション実行
     Simulator::Stop(Seconds(simTime));
@@ -481,8 +584,10 @@ int main(int argc, char *argv[]) {
     }
 
     std::cout << "\n【シミュレーション完了】" << std::endl;
-    std::cout << "  結果ファイル: simple_ap_selection_results.txt" << std::endl;
-    std::cout << "  アニメーションファイル: simple-kamikawa-animation.xml" << std::endl;
+    std::cout << "  出力ディレクトリ: " << g_outputDir << std::endl;
+    std::cout << "  結果ファイル: " << resultFileName << std::endl;
+    std::cout << "  設定ファイル: " << configFileName << std::endl;
+    std::cout << "  アニメーションファイル: " << animFileName << std::endl;
     std::cout << std::string(80, '=') << std::endl;
 
     resultFile.close();
