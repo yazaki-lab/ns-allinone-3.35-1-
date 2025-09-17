@@ -1,0 +1,14 @@
+Time(s)	UserID	Position(x,y)	SelectedAP	ExpectedThroughput(Mbps)	CurrentThroughput(Mbps)	Status
+1	0	(25,0)	0	65	0	MOVING
+2	0	(25,0)	0	65	52	MOVING
+7	0	(25,0)	0	65	52	MOVING
+12	0	(25,0)	0	65	52	MOVING
+17	0	(25,0)	0	65	52	MOVING
+22	0	(25,0)	0	65	52	MOVING
+27	0	(25,0)	0	65	52	MOVING
+32	0	(25,0)	0	65	52	MOVING
+37	0	(25,0)	0	65	52	MOVING
+42	0	(25,0)	0	65	52	MOVING
+47	0	(25,0)	0	65	52	MOVING
+52	0	(25,0)	0	65	52	MOVING
+57	0	(25,0)	0	65	52	MOVING

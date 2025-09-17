@@ -1,0 +1,35 @@
+# WiFi AP Selection Simulation Configuration
+# Generated on: 20250915_143803
+
+[Simulation Parameters]
+Number_of_APs=2
+Number_of_Users=1
+Simulation_Time_sec=60.0
+Simulation_Area=30x30m
+WiFi_Standard=802.11a
+User_Mobility=AP_Directed_Movement_with_Throughput_Threshold
+
+[AP Selection Algorithm Parameters]
+Distance_Threshold_m=25.0
+Min_Required_Throughput_Mbps=10.0
+Weight_Throughput=0.5
+Weight_Distance=0.4
+Weight_Channel=0.1
+Weight_Users=0.0
+
+[AP Configuration]
+AP0_Position_x=15.0
+AP0_Position_y=15.0
+AP0_Connected_Users=0
+AP0_Channel_Utilization=0.200
+AP0_Channel=0
+AP1_Position_x=5.0
+AP1_Position_y=25.0
+AP1_Connected_Users=0
+AP1_Channel_Utilization=0.600
+AP1_Channel=1
+
+[User Initial Configuration]
+User0_Initial_Position_x=25.0
+User0_Initial_Position_y=5.0
+User0_Throughput_Threshold_Mbps=80.0
