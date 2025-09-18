@@ -336,6 +336,7 @@ static APSelectionAlgorithm* g_algorithm = nullptr;
 static std::vector<APInfo> g_apInfoList;
 static std::vector<UserInfo> g_userInfoList;
 static std::string g_outputDir = "";
+static std::string g_sessionDir = "";  // 追加：セッション用ディレクトリ
 static std::string g_timestamp = "";
 static std::vector<Ptr<APDirectedMobilityModel>> g_userMobilityModels;
 
@@ -702,11 +703,18 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // ファイル名設定
-    std::string resultFileName = g_outputDir + "/AP2User_NewExisting_" + g_timestamp + ".txt";
-    std::string configFileName = g_outputDir + "/AP2User_NewExisting_config_" + g_timestamp + ".txt";
-    std::string terminalOutputFileName = g_outputDir + "/AP2User_NewExisting_output_" + g_timestamp + ".txt";
-    std::string animFileName = g_outputDir + "/AP2User_NewExisting_animation_" + g_timestamp + ".xml";
+    // セッション専用ディレクトリ作成（修正部分）
+    g_sessionDir = g_outputDir + "/AP2User5_" + g_timestamp;
+    if (!CreateDirectory(g_sessionDir)) {
+        std::cerr << "Failed to create session directory: " << g_sessionDir << std::endl;
+        return 1;
+    }
+
+    // ファイル名設定（シンプルなファイル名に変更）
+    std::string resultFileName = g_sessionDir + "/results.txt";
+    std::string configFileName = g_sessionDir + "/config.txt";
+    std::string terminalOutputFileName = g_sessionDir + "/output.txt";
+    std::string animFileName = g_sessionDir + "/animation.xml";
 
     // ファイル開く
     std::ofstream resultFile(resultFileName);
@@ -891,7 +899,7 @@ int main(int argc, char *argv[]) {
     Ipv4InterfaceContainer apInterfaces = address.Assign(apDevices);
     Ipv4InterfaceContainer staInterfaces = address.Assign(staDevices);
 
-    // UDPエコーサーバー設定
+    // UDPエコーサーバ設定
     UdpEchoServerHelper echoServer(9);
     ApplicationContainer serverApps = echoServer.Install(apNodes.Get(0));
     serverApps.Start(Seconds(1.0));
@@ -913,8 +921,8 @@ int main(int argc, char *argv[]) {
     // NetAnim設定（色分け）
     AnimationInterface anim(animFileName);
     anim.UpdateNodeColor(apNodes.Get(0), 0, 255, 0);    // AP0を緑色
-    anim.UpdateNodeColor(apNodes.Get(1), 0, 255, 0);  // AP1を緑色
-
+    anim.UpdateNodeColor(apNodes.Get(1), 0, 255, 255);  // AP1を水色
+    
     // ユーザーを色分け
     for (uint32_t i = 0; i < nUsers; ++i) {
         if (g_userInfoList[i].isNewUser) {
@@ -936,6 +944,7 @@ int main(int argc, char *argv[]) {
     DUAL_COUT("\n【シミュレーション開始】" << std::endl);
     DUAL_COUT("  開始時刻: " << g_timestamp << std::endl);
     DUAL_COUT("  実行時間: " << simTime << "秒" << std::endl);
+    DUAL_COUT("  出力ディレクトリ: " << g_sessionDir << std::endl);
     
     Simulator::Run();
 
@@ -1032,12 +1041,92 @@ int main(int argc, char *argv[]) {
     DUAL_COUT("\n【実験後システム全体スループット（調和平均）】: " 
               << std::fixed << std::setprecision(2) << finalSystemThroughput << " Mbps" << std::endl);
 
+    // スループット改善の評価
+    // 実験前のスループットを再計算（初期位置での値）
+    double initialSystemThroughput = 0.0;
+    
+    // 一時的にAPの情報をリセット
+    for (uint32_t apId = 0; apId < g_nAPs; ++apId) {
+        g_apInfoList[apId].totalThroughput = 0.0;
+        g_apInfoList[apId].connectedUsers = 0;
+    }
+    
+    // 初期位置での各ユーザーのスループットを計算
+    for (uint32_t i = 0; i < g_nUsers; ++i) {
+        Vector initialPos = g_userInfoList[i].initialPosition;
+        uint32_t initialConnectedAP;
+        
+        if (g_userInfoList[i].isNewUser) {
+            // 新規ユーザーの場合、初期位置での最適AP選択
+            APSelectionResult initialResult = g_algorithm->SelectOptimalAPDetailed(initialPos, i);
+            initialConnectedAP = initialResult.selectedAP;
+        } else {
+            // 既存ユーザーの場合、現在の接続APを使用
+            initialConnectedAP = g_userInfoList[i].connectedAP;
+        }
+        
+        // 初期位置でのスループット計算
+        Vector apPos = g_apNodes->Get(initialConnectedAP)->GetObject<MobilityModel>()->GetPosition();
+        double distance = sqrt(pow(initialPos.x - apPos.x, 2) + pow(initialPos.y - apPos.y, 2));
+        
+        double baseThroughput;
+        if (distance < 5.0) baseThroughput = 150.0;
+        else if (distance < 10.0) baseThroughput = 130.0;
+        else if (distance < 15.0) baseThroughput = 100.0;
+        else if (distance < 20.0) baseThroughput = 65.0;
+        else if (distance < 25.0) baseThroughput = 30.0;
+        else baseThroughput = 6.5;
+        
+        double channelEffect = 1.0 - g_apInfoList[initialConnectedAP].channelUtilization;
+        double initialThroughput = baseThroughput * channelEffect;
+        
+        // APごとの総スループットに追加
+        g_apInfoList[initialConnectedAP].totalThroughput += initialThroughput;
+        g_apInfoList[initialConnectedAP].connectedUsers++;
+    }
+    
+    // 実験前の調和平均を計算
+    double harmonicSum = 0.0;
+    int activeAPs = 0;
+    
+    for (const auto& ap : g_apInfoList) {
+        if (ap.totalThroughput > 0.0) {
+            harmonicSum += 1.0 / ap.totalThroughput;
+            activeAPs++;
+        }
+    }
+    
+    if (harmonicSum > 0.0 && activeAPs > 0) {
+        initialSystemThroughput = activeAPs / harmonicSum;
+    }
+
+    // 改善率の計算
+    double throughputImprovement = finalSystemThroughput - initialSystemThroughput;
+    double improvementPercentage = (initialSystemThroughput > 0.0) ? 
+        (throughputImprovement / initialSystemThroughput) * 100.0 : 0.0;
+
+    DUAL_COUT("\n【全体スループット改善評価】" << std::endl);
+    DUAL_COUT("  実験前システムスループット（調和平均）: " << std::setprecision(2) << initialSystemThroughput << " Mbps" << std::endl);
+    DUAL_COUT("  実験後システムスループット（調和平均）: " << std::setprecision(2) << finalSystemThroughput << " Mbps" << std::endl);
+    DUAL_COUT("  スループット改善量: " << std::setprecision(2) << throughputImprovement << " Mbps" << std::endl);
+    DUAL_COUT("  スループット改善率: " << std::setprecision(1) << improvementPercentage << "%" << std::endl);
+    
+    if (improvementPercentage > 0) {
+        DUAL_COUT("  → 新規ユーザーの移動により全体スループットが改善されました！" << std::endl);
+    } else if (improvementPercentage < 0) {
+        DUAL_COUT("  → 新規ユーザーの移動により全体スループットがわずかに低下しました。" << std::endl);
+    } else {
+        DUAL_COUT("  → 全体スループットに変化はありませんでした。" << std::endl);
+    }
+
     DUAL_COUT("\n【シミュレーション完了】" << std::endl);
-    DUAL_COUT("  出力ディレクトリ: " << g_outputDir << std::endl);
-    DUAL_COUT("  結果ファイル: " << resultFileName << std::endl);
-    DUAL_COUT("  設定ファイル: " << configFileName << std::endl);
-    DUAL_COUT("  ターミナル出力ファイル: " << terminalOutputFileName << std::endl);
-    DUAL_COUT("  アニメーションファイル: " << animFileName << std::endl);
+    DUAL_COUT("  セッションディレクトリ: " << g_sessionDir << std::endl);
+    DUAL_COUT("  結果ファイル: results.txt" << std::endl);
+    DUAL_COUT("  設定ファイル: config.txt" << std::endl);
+    DUAL_COUT("  ターミナル出力ファイル: output.txt" << std::endl);
+    DUAL_COUT("  アニメーションファイル: animation.xml" << std::endl);
+    DUAL_COUT("  新規ユーザ（赤色）: " << g_nNewUsers << "台が移動" << std::endl);
+    DUAL_COUT("  既存ユーザ（青色）: " << g_nExistingUsers << "台が固定" << std::endl);
     DUAL_COUT(std::string(80, '=') << std::endl);
 
     // ファイルを閉じる
