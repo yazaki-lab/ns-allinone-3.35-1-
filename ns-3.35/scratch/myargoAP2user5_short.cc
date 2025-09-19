@@ -161,7 +161,7 @@ private:
     }
 };
 
-// 完全版と同じAP選択アルゴリズム
+// 完全版と同じAP選択アルゴリズム 
 class APSelectionAlgorithm {
 private:
     std::vector<APInfo> m_apList;
@@ -176,6 +176,7 @@ public:
     }
     
     const std::vector<double>& getWeights() const { return m_weights; }
+    double getDThreshold() const { return m_dThreshold; }
 
     void UpdateAPInfo(const std::vector<APInfo>& apList) { m_apList = apList; }
 
@@ -311,6 +312,8 @@ static uint32_t g_nUsers = 0;
 static uint32_t g_nNewUsers = 0;
 static uint32_t g_nExistingUsers = 0;
 static double g_simTime = 0.0;
+static double g_movementRadius = 0.0;  // 移動許容距離を追加
+static double g_requiredThroughput = 0.0;  // 要求スループットを追加
 static APSelectionAlgorithm* g_algorithm = nullptr;
 static std::vector<APInfo> g_apInfoList;
 static std::vector<UserInfo> g_userInfoList;
@@ -469,6 +472,8 @@ void PrintInitialState() {
     OUTPUT("AP数: " << g_nAPs << ", ユーザ数: " << g_nUsers);
     OUTPUT(" (新規:" << g_nNewUsers << ", 既存:" << g_nExistingUsers << ")\n");
     OUTPUT("シミュレーション時間: " << g_simTime << "秒\n");
+    OUTPUT("移動許容距離: " << g_movementRadius << "m\n");
+    OUTPUT("要求スループット: " << g_requiredThroughput << "Mbps\n");
     
     // 実験前のシステム全体のスループット（完全版と同じ計算）
     double initialSystemThroughput = CalculateSystemThroughput();
@@ -485,6 +490,8 @@ void StartUserMovement() {
 void PrintFinalResults() {
     OUTPUT("\n=== シミュレーション完了 ===\n");
     OUTPUT("結果ディレクトリ: " << g_sessionDir << "\n");
+    OUTPUT("移動許容距離: " << g_movementRadius << "m\n");
+    OUTPUT("要求スループット: " << g_requiredThroughput << "Mbps\n");
     
     // 最終位置とスループット表示
     for (uint32_t i = 0; i < g_nUsers; ++i) {
@@ -575,12 +582,23 @@ int main(int argc, char *argv[]) {
     uint32_t nExistingUsers = 3;
     uint32_t nUsers = nNewUsers + nExistingUsers;
     double simTime = 30.0;
+    double movementRadius = 15.0;  // 移動許容距離のデフォルト値
+    double requiredThroughput = 90.0;  // 要求スループットのデフォルト値
+
+    // コマンドライン引数の処理（オプション）
+    CommandLine cmd;
+    cmd.AddValue("movementRadius", "移動許容距離 (m)", movementRadius);
+    cmd.AddValue("requiredThroughput", "要求スループット (Mbps)", requiredThroughput);
+    cmd.AddValue("simTime", "シミュレーション時間 (秒)", simTime);
+    cmd.Parse(argc, argv);
 
     g_nAPs = nAPs;
     g_nUsers = nUsers;
     g_nNewUsers = nNewUsers;
     g_nExistingUsers = nExistingUsers;
     g_simTime = simTime;
+    g_movementRadius = movementRadius;
+    g_requiredThroughput = requiredThroughput;
 
     // 出力ディレクトリ作成
     std::string outputDir = "results";
@@ -684,7 +702,7 @@ int main(int argc, char *argv[]) {
         g_userInfoList[i].initialPosition = g_userMobilityModels[i]->GetPosition();
         g_userInfoList[i].connectedAP = 0;
         g_userInfoList[i].throughput = 0.0;
-        g_userInfoList[i].throughputThreshold = 60.0; // 60Mbpsの閾値
+        g_userInfoList[i].throughputThreshold = requiredThroughput; // コマンドライン引数を使用
         g_userInfoList[i].hasReachedThreshold = false;
         g_userInfoList[i].isNewUser = true;
     }
@@ -706,8 +724,8 @@ int main(int argc, char *argv[]) {
         g_userInfoList[i].isNewUser = false;
     }
 
-    // 完全版と同じアルゴリズム初期化
-    APSelectionAlgorithm algorithm(25.0, 10.0);
+    // 完全版と同じアルゴリズム初期化（移動許容距離を反映）
+    APSelectionAlgorithm algorithm(movementRadius, 10.0);
     algorithm.UpdateAPInfo(g_apInfoList);
     g_algorithm = &algorithm;
 
