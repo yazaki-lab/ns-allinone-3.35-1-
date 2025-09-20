@@ -42,6 +42,7 @@ struct UserInfo {
     double throughputThreshold;
     bool hasReachedThreshold;
     bool isNewUser;
+    double movementDistance; // 移動距離を追加
 };
 
 // AP選択結果を格納する構造体（完全版と同じ）
@@ -161,7 +162,7 @@ private:
     }
 };
 
-// 完全版と同じAP選択アルゴリズム 
+// 完全版と同じAP選択アルゴリズム  
 class APSelectionAlgorithm {
 private:
     std::vector<APInfo> m_apList;
@@ -312,8 +313,8 @@ static uint32_t g_nUsers = 0;
 static uint32_t g_nNewUsers = 0;
 static uint32_t g_nExistingUsers = 0;
 static double g_simTime = 0.0;
-static double g_movementRadius = 0.0;  // 移動許容距離を追加
-static double g_requiredThroughput = 0.0;  // 要求スループットを追加
+static double g_movementRadius = 0.0;  // 移動許容距離を追加 
+static double g_requiredThroughput = 0.0;  // 要求スループットを追加 
 static APSelectionAlgorithm* g_algorithm = nullptr;
 static std::vector<APInfo> g_apInfoList;
 static std::vector<UserInfo> g_userInfoList;
@@ -334,6 +335,71 @@ void PrintMessage(const std::string& message) {
     oss << x; \
     PrintMessage(oss.str()); \
 } while(0)
+
+// タイムスタンプとディレクトリ作成
+std::string GetTimestamp() {
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[80];
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", timeinfo);
+    return std::string(buffer);
+}
+
+bool CreateDirectory(const std::string& path) {
+#ifdef _WIN32
+    return _mkdir(path.c_str()) == 0 || errno == EEXIST;
+#else
+    return mkdir(path.c_str(), 0777) == 0 || errno == EEXIST;
+#endif
+}
+
+// CSVファイルに結果を追加出力する関数
+void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroughput) {
+    // results_csvディレクトリの作成
+    std::string csvDir = "results_csv";
+    CreateDirectory(csvDir);
+    
+    std::string csvFile = csvDir + "/myargo_AP2user5.csv";
+    
+    // ファイルが存在しない場合はヘッダーを追加
+    bool fileExists = false;
+    std::ifstream checkFile(csvFile);
+    if (checkFile.good()) {
+        fileExists = true;
+    }
+    checkFile.close();
+    
+    std::ofstream csvOutput(csvFile, std::ios::app); // 追記モード
+    
+    if (!fileExists) {
+        // ヘッダー行を追加
+        csvOutput << "Method,NewUserName,MovementRadius,RequiredThroughput,MovementDistance,ConnectedAP,FinalSystemThroughput,InitialSystemThroughput,ImprovementRate" << std::endl;
+    }
+    
+    // 新規ユーザーごとにデータを出力
+    for (uint32_t i = 0; i < g_nNewUsers; ++i) {
+        if (g_userInfoList[i].isNewUser) {
+            double improvementRate = (initialSystemThroughput > 0.0) ? 
+                ((finalSystemThroughput - initialSystemThroughput) / initialSystemThroughput) * 100.0 : 0.0;
+            
+            csvOutput << std::fixed << std::setprecision(2);
+            csvOutput << "myargo," 
+                     << "User" << i << ","
+                     << g_movementRadius << ","
+                     << g_requiredThroughput << ","
+                     << g_userInfoList[i].movementDistance << ","
+                     << "AP" << g_userInfoList[i].connectedAP << ","
+                     << finalSystemThroughput << ","
+                     << initialSystemThroughput << ","
+                     << improvementRate << std::endl;
+        }
+    }
+    
+    csvOutput.close();
+    OUTPUT("CSVファイルに結果を出力しました: " << csvFile << "\n");
+}
 
 // システム全体のスループットを計算する関数（調和平均）
 double CalculateSystemThroughput() {
@@ -417,6 +483,11 @@ void UpdateUserMovement() {
         Vector userPos = g_userMobilityModels[i]->GetPosition();
         g_userInfoList[i].position = userPos;
         
+        // 移動距離を計算（現在位置と初期位置の距離）
+        Vector initialPos = g_userInfoList[i].initialPosition;
+        g_userInfoList[i].movementDistance = sqrt(
+            pow(userPos.x - initialPos.x, 2) + pow(userPos.y - initialPos.y, 2));
+        
         // 完全版と同じ詳細なAP選択を使用
         APSelectionResult result = g_algorithm->SelectOptimalAPDetailed(userPos, i);
         double currentThroughput = CalculateCurrentThroughput(i, result.selectedAP);
@@ -425,6 +496,11 @@ void UpdateUserMovement() {
         if (currentThroughput >= g_userInfoList[i].throughputThreshold) {
             g_userInfoList[i].hasReachedThreshold = true;
             g_userMobilityModels[i]->StopMoving();
+            
+            OUTPUT("新規ユーザ" << i << ": 要求スループット達成 位置(" 
+                   << std::fixed << std::setprecision(1) << userPos.x << ", " << userPos.y 
+                   << ") -> AP" << result.selectedAP << " 接続, スループット: " 
+                   << std::setprecision(2) << currentThroughput << "Mbps\n");
         } else {
             Ptr<MobilityModel> targetAPMobility = g_apNodes->Get(result.selectedAP)->GetObject<MobilityModel>();
             if (targetAPMobility) {
@@ -445,25 +521,6 @@ void UpdateUserMovement() {
     if (anyMoving && Simulator::Now().GetSeconds() < g_simTime - 1.0) {
         Simulator::Schedule(Seconds(1.0), &UpdateUserMovement);
     }
-}
-
-// タイムスタンプとディレクトリ作成
-std::string GetTimestamp() {
-    time_t rawtime;
-    struct tm * timeinfo;
-    char buffer[80];
-    time(&rawtime);
-    timeinfo = localtime(&rawtime);
-    strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", timeinfo);
-    return std::string(buffer);
-}
-
-bool CreateDirectory(const std::string& path) {
-#ifdef _WIN32
-    return _mkdir(path.c_str()) == 0 || errno == EEXIST;
-#else
-    return mkdir(path.c_str(), 0777) == 0 || errno == EEXIST;
-#endif
 }
 
 // 初期状態表示
@@ -498,7 +555,10 @@ void PrintFinalResults() {
         if (g_userInfoList[i].isNewUser) {
             Vector pos = g_userMobilityModels[i]->GetPosition();
             OUTPUT("新規ユーザ" << i << ": 最終位置(" << std::fixed << std::setprecision(1) 
-                   << pos.x << ", " << pos.y << "), スループット: " 
+                   << pos.x << ", " << pos.y << "), 移動距離: " 
+                   << std::setprecision(2) << g_userInfoList[i].movementDistance 
+                   << "m, 接続AP: " << g_userInfoList[i].connectedAP
+                   << ", スループット: " << std::setprecision(2) 
                    << g_userInfoList[i].throughput << "Mbps\n");
         }
     }
@@ -573,6 +633,9 @@ void PrintFinalResults() {
     OUTPUT("初期システムスループット: " << std::setprecision(2) << initialSystemThroughput << " Mbps\n");
     OUTPUT("スループット改善量: " << std::setprecision(2) << improvement << " Mbps\n");
     OUTPUT("改善率: " << std::setprecision(1) << improvementPercent << "%\n");
+    
+    // CSV出力
+    OutputResultsToCSV(finalSystemThroughput, initialSystemThroughput);
 }
 
 int main(int argc, char *argv[]) {
@@ -603,7 +666,7 @@ int main(int argc, char *argv[]) {
     // 出力ディレクトリ作成
     std::string outputDir = "results";
     CreateDirectory(outputDir);
-    g_sessionDir = outputDir + "/AP2User5_improved_" + GetTimestamp();
+    g_sessionDir = outputDir + "/AP2User5_myargo_" + GetTimestamp();
     CreateDirectory(g_sessionDir);
 
     std::ofstream outputFile(g_sessionDir + "/output.txt");
@@ -705,6 +768,7 @@ int main(int argc, char *argv[]) {
         g_userInfoList[i].throughputThreshold = requiredThroughput; // コマンドライン引数を使用
         g_userInfoList[i].hasReachedThreshold = false;
         g_userInfoList[i].isNewUser = true;
+        g_userInfoList[i].movementDistance = 0.0; // 初期化
     }
     
     // 既存ユーザの設定
@@ -722,6 +786,7 @@ int main(int argc, char *argv[]) {
         g_userInfoList[i].throughputThreshold = 0.0;
         g_userInfoList[i].hasReachedThreshold = true;
         g_userInfoList[i].isNewUser = false;
+        g_userInfoList[i].movementDistance = 0.0; // 既存ユーザは移動しない
     }
 
     // 完全版と同じアルゴリズム初期化（移動許容距離を反映）
