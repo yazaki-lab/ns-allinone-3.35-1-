@@ -665,7 +665,7 @@ int main(int argc, char *argv[]) {
     uint32_t nUsers = nNewUsers + nExistingUsers;
     double simTime = 30.0;
     double movementRadius = 15.0;  // 移動許容距離のデフォルト値
-    double requiredThroughput = 90.0;  // 要求スループットのデフォルト値
+    double requiredThroughput = 130.0;  // 要求スループットのデフォルト値
 
     // コマンドライン引数の処理（オプション）
     CommandLine cmd;
