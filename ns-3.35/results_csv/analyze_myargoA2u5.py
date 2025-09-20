@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # CSVファイルを読み込む
-df = pd.read_csv("myargo_AP2user5.csv")
+df = pd.read_csv("myargo_AP2user5_upglade.csv")
 
 # データの基本統計量を表示
 print("=== 基本統計量 ===")

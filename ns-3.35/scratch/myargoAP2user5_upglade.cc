@@ -373,7 +373,7 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     std::string csvDir = "results_csv";
     CreateDirectory(csvDir);
     
-    std::string csvFile = csvDir + "/myargo_AP2user5.csv";
+    std::string csvFile = csvDir + "/myargo_AP2user5_upglade.csv";
     
     // ファイルが存在しない場合はヘッダーを追加
     bool fileExists = false;
