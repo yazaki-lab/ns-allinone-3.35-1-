@@ -853,7 +853,7 @@ int main(int argc, char *argv[]) {
     // アニメーション
     AnimationInterface anim(g_sessionDir + "/animation.xml");
     anim.UpdateNodeColor(apNodes.Get(0), 0, 255, 0);
-    anim.UpdateNodeColor(apNodes.Get(1), 0, 255, 255);
+    anim.UpdateNodeColor(apNodes.Get(1), 0, 255, 0);
     for (uint32_t i = 0; i < nUsers; ++i) {
         anim.UpdateNodeColor(staNodes.Get(i), 
                            g_userInfoList[i].isNewUser ? 255 : 0, 0, 
