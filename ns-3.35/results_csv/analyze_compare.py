@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 # CSVファイルのパス
 file1 = "random_AP2user5.csv"
-file2 = "myargo_AP2user5_upglade.csv"
+file2 = "myargo_AP2user5_0946.csv"
 
 # データ読み込み
 df1 = pd.read_csv(file1)
@@ -21,7 +21,7 @@ plt.rcParams.update({"font.size": 14})
 # ======================
 plt.figure(figsize=(6, 5))
 plt.boxplot([improvement1, improvement2],
-            labels=["Random", "MyArgo"],
+            tick_labels=["Random", "MyArgo"],
             patch_artist=True,
             boxprops=dict(facecolor="lightblue"),
             medianprops=dict(color="red"),

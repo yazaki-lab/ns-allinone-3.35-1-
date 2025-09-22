@@ -174,7 +174,7 @@ private:
 public:
     APSelectionAlgorithm(double dTh = 25.0, double thetaTh = 10.0) 
         : m_dThreshold(dTh), m_thetaThreshold(thetaTh) {
-        m_weights = {0.5, 0.4, 0.1, 0.0};
+        m_weights = {0.25, 0.25, 0.25, 0.25};
     }
     
     const std::vector<double>& getWeights() const { return m_weights; }
@@ -373,7 +373,7 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     std::string csvDir = "results_csv";
     CreateDirectory(csvDir);
     
-    std::string csvFile = csvDir + "/myargo_AP2user5_upglade.csv";
+    std::string csvFile = csvDir + "/myargo_AP2user5_0946.csv";
     
     // ファイルが存在しない場合はヘッダーを追加
     bool fileExists = false;
