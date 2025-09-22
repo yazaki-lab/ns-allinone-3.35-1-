@@ -27,22 +27,18 @@ plt.boxplot([improvement1, improvement2],
             medianprops=dict(color="red"),
             positions=[1, 1.5],  # 箱の間隔を狭める
             widths=0.35)         # 箱の幅を小さめに
+
+# 平均値を計算してプロット
+means = [improvement1.mean(), improvement2.mean()]
+plt.plot([1, 1.5], means, "D", color="green", label="Mean")  # "D" はダイヤマーカー
+
+# 平均値の数値を表示（少し上にずらして見やすくする）
+for x, y in zip([1, 1.5], means):
+    plt.text(x, y + 0.5, f"{y:.2f}", ha="center", va="bottom", color="green", fontsize=12)
+
 plt.title("Boxplot of Improvement Rate")
 plt.ylabel("Improvement Rate (%)")
 plt.grid(True, linestyle="--", alpha=0.6)
-plt.savefig("boxplot.png", dpi=300, bbox_inches="tight")
-plt.close()
-
-# ======================
-# 2. ヒストグラム
-# ======================
-plt.figure(figsize=(6, 5))
-plt.hist(improvement1, bins=20, alpha=0.6, label="Random", color="blue")
-plt.hist(improvement2, bins=20, alpha=0.6, label="MyArgo", color="orange")
-plt.title("Histogram of Improvement Rate")
-plt.xlabel("Improvement Rate (%)")
-plt.ylabel("Frequency")
 plt.legend()
-plt.grid(True, linestyle="--", alpha=0.6)
-plt.savefig("histogram.png", dpi=300, bbox_inches="tight")
+plt.savefig("boxplot.png", dpi=300, bbox_inches="tight")
 plt.close()
