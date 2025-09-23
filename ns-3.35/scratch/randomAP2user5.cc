@@ -48,6 +48,14 @@ struct UserInfo {
     double movementDistance; // 移動距離を追加
 };
 
+// 位置分散計算構造体を追加
+struct PositionVariance {
+    double varianceX;
+    double varianceY;
+    double totalVariance;
+    Vector centerPosition;
+};
+
 // ランダム移動モデル
 class RandomMobilityModel : public MobilityModel {
 private:
@@ -239,7 +247,47 @@ void PrintMessage(const std::string& message) {
     PrintMessage(oss.str()); \
 } while(0)
 
-
+// 位置の分散を計算する関数
+PositionVariance CalculatePositionVariance() {
+    PositionVariance variance;
+    
+    if (g_userInfoList.empty()) {
+        variance.varianceX = 0.0;
+        variance.varianceY = 0.0;
+        variance.totalVariance = 0.0;
+        variance.centerPosition = Vector(0.0, 0.0, 0.0);
+        return variance;
+    }
+    
+    // 中心位置（重心）を計算
+    double sumX = 0.0, sumY = 0.0;
+    for (const auto& user : g_userInfoList) {
+        sumX += user.position.x;
+        sumY += user.position.y;
+    }
+    
+    variance.centerPosition.x = sumX / g_nUsers;
+    variance.centerPosition.y = sumY / g_nUsers;
+    variance.centerPosition.z = 0.0;
+    
+    // 分散を計算
+    double sumSquaredDeviationX = 0.0;
+    double sumSquaredDeviationY = 0.0;
+    
+    for (const auto& user : g_userInfoList) {
+        double deviationX = user.position.x - variance.centerPosition.x;
+        double deviationY = user.position.y - variance.centerPosition.y;
+        
+        sumSquaredDeviationX += deviationX * deviationX;
+        sumSquaredDeviationY += deviationY * deviationY;
+    }
+    
+    variance.varianceX = sumSquaredDeviationX / g_nUsers;
+    variance.varianceY = sumSquaredDeviationY / g_nUsers;
+    variance.totalVariance = variance.varianceX + variance.varianceY;
+    
+    return variance;
+}
 
 // スループット計算関数
 double CalculateCurrentThroughput(uint32_t userId, uint32_t apId) {
@@ -373,13 +421,16 @@ bool CreateDirectory(const std::string& path) {
 #endif
 }
 
-// CSVファイルに結果を追加出力する関数
+// CSVファイルに結果を追加出力する関数（位置分散情報を追加）
 void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroughput) {
+    // 位置の分散を計算
+    PositionVariance posVariance = CalculatePositionVariance();
+    
     // results_csvディレクトリの作成
     std::string csvDir = "results_csv";
     CreateDirectory(csvDir);
     
-    std::string csvFile = csvDir + "/random_AP2user5.csv";
+    std::string csvFile = csvDir + "/random_AP2user5_1114.csv";
     
     // ファイルが存在しない場合はヘッダーを追加
     bool fileExists = false;
@@ -392,8 +443,10 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     std::ofstream csvOutput(csvFile, std::ios::app); // 追記モード
     
     if (!fileExists) {
-        // ヘッダー行を追加
-        csvOutput << "Method,NewUserName,MovementRadius,RequiredThroughput,MovementDistance,ConnectedAP,FinalSystemThroughput,InitialSystemThroughput,ImprovementRate" << std::endl;
+        // ヘッダー行を追加（位置分散関連の列を追加）
+        csvOutput << "Method,NewUserName,MovementRadius,RequiredThroughput,MovementDistance,ConnectedAP,"
+                  << "FinalSystemThroughput,InitialSystemThroughput,ImprovementRate,"
+                  << "CenterX,CenterY,VarianceX,VarianceY,TotalVariance" << std::endl;
     }
     
     // 新規ユーザーごとにデータを出力
@@ -411,7 +464,12 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
                      << "AP" << g_userInfoList[i].connectedAP << ","
                      << finalSystemThroughput << ","
                      << initialSystemThroughput << ","
-                     << improvementRate << std::endl;
+                     << improvementRate << ","
+                     << posVariance.centerPosition.x << ","
+                     << posVariance.centerPosition.y << ","
+                     << posVariance.varianceX << ","
+                     << posVariance.varianceY << ","
+                     << posVariance.totalVariance << std::endl;
         }
     }
     
@@ -444,6 +502,15 @@ void PrintInitialState() {
                << target.x << ", " << target.y << "), 距離: " 
                << std::setprecision(2) << distance << "m\n");
     }
+    
+    // 初期位置の分散を表示
+    PositionVariance initialVariance = CalculatePositionVariance();
+    OUTPUT("\n初期位置の分散:\n");
+    OUTPUT("重心位置: (" << std::fixed << std::setprecision(2) 
+           << initialVariance.centerPosition.x << ", " << initialVariance.centerPosition.y << ")\n");
+    OUTPUT("X方向分散: " << std::setprecision(2) << initialVariance.varianceX << "\n");
+    OUTPUT("Y方向分散: " << std::setprecision(2) << initialVariance.varianceY << "\n");
+    OUTPUT("総分散: " << std::setprecision(2) << initialVariance.totalVariance << "\n");
 }
 
 void StartUserMovement() {
@@ -478,6 +545,15 @@ void PrintFinalResults() {
                    << g_userInfoList[i].throughput << "Mbps\n");
         }
     }
+    
+    // 最終位置の分散を表示
+    PositionVariance finalVariance = CalculatePositionVariance();
+    OUTPUT("\n最終位置の分散:\n");
+    OUTPUT("重心位置: (" << std::fixed << std::setprecision(2) 
+           << finalVariance.centerPosition.x << ", " << finalVariance.centerPosition.y << ")\n");
+    OUTPUT("X方向分散: " << std::setprecision(2) << finalVariance.varianceX << "\n");
+    OUTPUT("Y方向分散: " << std::setprecision(2) << finalVariance.varianceY << "\n");
+    OUTPUT("総分散: " << std::setprecision(2) << finalVariance.totalVariance << "\n");
     
     // システム全体スループット評価
     double finalSystemThroughput = CalculateSystemThroughput();
@@ -645,7 +721,7 @@ int main(int argc, char *argv[]) {
         Vector fixedPos;
         if (i == 2) fixedPos = Vector(12.0, 8.0, 0.0);
         else if (i == 3) fixedPos = Vector(8.0, 12.0, 0.0);
-        else if (i == 4) fixedPos = Vector(7.0, 7.0, 0.0);
+        else if (i == 4) fixedPos = Vector(20.0, 20.0, 0.0);
         
         constantMobility->SetPosition(fixedPos);
         staNodes.Get(i)->AggregateObject(constantMobility);
