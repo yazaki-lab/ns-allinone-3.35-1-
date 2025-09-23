@@ -43,7 +43,7 @@ struct UserInfo {
     double throughputThreshold;
     bool hasReachedThreshold;
     bool isNewUser;
-    double movementDistance; // 移動距離を追加 
+    double movementDistance; // 移動距離を追加
 };
 
 // AP選択結果を格納する構造体（完全版と同じ）
@@ -163,7 +163,7 @@ private:
     }
 };
 
-// 完全版と同じAP選択アルゴリズム    
+// 完全版と同じAP選択アルゴリズム     
 class APSelectionAlgorithm {
 private:
     std::vector<APInfo> m_apList;
@@ -303,6 +303,22 @@ public:
         APSelectionResult result = SelectOptimalAPDetailed(userPos, 0);
         return result.selectedAP;
     }
+    
+    // 距離ベースのAP選択（初期接続用）
+    uint32_t SelectNearestAP(const Vector& userPos) {
+        double minDistance = 1e9;
+        uint32_t nearestAP = 0;
+        
+        for (const auto& ap : m_apList) {
+            double distance = CalculateDistance(userPos, ap.position);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestAP = ap.apId;
+            }
+        }
+        
+        return nearestAP;
+    }
 };
 
 // グローバル変数
@@ -314,8 +330,8 @@ static uint32_t g_nUsers = 0;
 static uint32_t g_nNewUsers = 0;
 static uint32_t g_nExistingUsers = 0;
 static double g_simTime = 0.0;
-static double g_movementRadius = 0.0;  // 移動許容距離を追加   
-static double g_requiredThroughput = 0.0;  // 要求スループットを追加   
+static double g_movementRadius = 0.0;  // 移動許容距離を追加    
+static double g_requiredThroughput = 0.0;  // 要求スループットを追加    
 static APSelectionAlgorithm* g_algorithm = nullptr;
 static std::vector<APInfo> g_apInfoList;
 static std::vector<UserInfo> g_userInfoList;
@@ -412,7 +428,7 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     std::string csvDir = "results_csv";
     CreateDirectory(csvDir);
     
-    std::string csvFile = csvDir + "/myargo_AP2user5_09231334.csv";
+    std::string csvFile = csvDir + "/myargo_AP2user5_09231356.csv";
     
     // ファイルが存在しない場合はヘッダーを追加
     bool fileExists = false;
@@ -569,6 +585,7 @@ Vector CalculateOptimalTargetPosition(const Vector& currentPos, const Vector& ap
     
     return targetPosition;
 }
+
 // ユーザ移動更新（完全版と同じロジック）
 void UpdateUserMovement() {
     if (!g_algorithm || g_userMobilityModels.empty()) return;
@@ -619,8 +636,6 @@ void UpdateUserMovement() {
     }
 }
 
-
-
 // 初期状態表示
 void PrintInitialState() {
     OUTPUT("\n=== WiFi APセレクションシミュレーション ===\n");
@@ -634,7 +649,14 @@ void PrintInitialState() {
     for (uint32_t i = 0; i < g_nNewUsers; ++i) {
         Vector pos = g_userInfoList[i].initialPosition;
         OUTPUT("新規ユーザ" << i << " 初期位置: (" << std::fixed << std::setprecision(1) 
-               << pos.x << ", " << pos.y << ")\n");
+               << pos.x << ", " << pos.y << ") -> 最寄りAP" << g_userInfoList[i].connectedAP << " 接続\n");
+    }
+    
+    // 既存ユーザの初期接続を表示
+    for (uint32_t i = g_nNewUsers; i < g_nUsers; ++i) {
+        Vector pos = g_userInfoList[i].position;
+        OUTPUT("既存ユーザ" << i << " 位置: (" << std::fixed << std::setprecision(1) 
+               << pos.x << ", " << pos.y << ") -> 最寄りAP" << g_userInfoList[i].connectedAP << " 接続\n");
     }
     
     // 実験前のシステム全体のスループット（完全版と同じ計算）
@@ -823,8 +845,8 @@ int main(int argc, char *argv[]) {
     
     // AP配置
     Ptr<ListPositionAllocator> apPositionAlloc = CreateObject<ListPositionAllocator>();
-    apPositionAlloc->Add(Vector(22.5, 22.5, 0.0));
-    apPositionAlloc->Add(Vector(7.5, 7.5, 0.0));
+    apPositionAlloc->Add(Vector(15.0, 15.0, 0.0));  // AP0の実際の位置
+    apPositionAlloc->Add(Vector(5.0, 5.0, 0.0));    // AP1の実際の位置
     
     mobility.SetPositionAllocator(apPositionAlloc);
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -878,6 +900,11 @@ int main(int argc, char *argv[]) {
     g_apInfoList[1].channel = 1;
     g_apInfoList[1].totalThroughput = 0.0;
 
+    // アルゴリズム初期化（移動許容距離を反映）
+    APSelectionAlgorithm algorithm(movementRadius, 10.0);
+    algorithm.UpdateAPInfo(g_apInfoList);
+    g_algorithm = &algorithm;
+
     // ユーザ情報初期化（完全版と同じ）
     g_userInfoList.resize(nUsers);
     
@@ -886,8 +913,11 @@ int main(int argc, char *argv[]) {
         g_userInfoList[i].userId = i;
         g_userInfoList[i].position = g_userMobilityModels[i]->GetPosition();
         g_userInfoList[i].initialPosition = g_userMobilityModels[i]->GetPosition();
-        g_userInfoList[i].connectedAP = 0;
-        g_userInfoList[i].throughput = 0.0;
+        
+        // 初期接続は最も近いAPに接続
+        g_userInfoList[i].connectedAP = g_algorithm->SelectNearestAP(g_userInfoList[i].initialPosition);
+        
+        g_userInfoList[i].throughput = CalculateCurrentThroughput(i, g_userInfoList[i].connectedAP);
         g_userInfoList[i].throughputThreshold = requiredThroughput; // コマンドライン引数を使用
         g_userInfoList[i].hasReachedThreshold = false;
         g_userInfoList[i].isNewUser = true;
@@ -899,23 +929,16 @@ int main(int argc, char *argv[]) {
         g_userInfoList[i].userId = i;
         g_userInfoList[i].position = staNodes.Get(i)->GetObject<MobilityModel>()->GetPosition();
         g_userInfoList[i].initialPosition = g_userInfoList[i].position;
-        // 既存ユーザのAP接続を決定（近いAPに接続）
-        double distToAP0 = sqrt(pow(g_userInfoList[i].position.x - g_apInfoList[0].position.x, 2) +
-                               pow(g_userInfoList[i].position.y - g_apInfoList[0].position.y, 2));
-        double distToAP1 = sqrt(pow(g_userInfoList[i].position.x - g_apInfoList[1].position.x, 2) +
-                               pow(g_userInfoList[i].position.y - g_apInfoList[1].position.y, 2));
-        g_userInfoList[i].connectedAP = (distToAP0 < distToAP1) ? 0 : 1;
+        
+        // 既存ユーザのAP接続を決定（最も近いAPに接続）
+        g_userInfoList[i].connectedAP = g_algorithm->SelectNearestAP(g_userInfoList[i].position);
+        
         g_userInfoList[i].throughput = CalculateCurrentThroughput(i, g_userInfoList[i].connectedAP);
         g_userInfoList[i].throughputThreshold = 0.0;
         g_userInfoList[i].hasReachedThreshold = true;
         g_userInfoList[i].isNewUser = false;
         g_userInfoList[i].movementDistance = 0.0; // 既存ユーザは移動しない
     }
-
-    // 完全版と同じアルゴリズム初期化（移動許容距離を反映）
-    APSelectionAlgorithm algorithm(movementRadius, 10.0);
-    algorithm.UpdateAPInfo(g_apInfoList);
-    g_algorithm = &algorithm;
 
     PrintInitialState();
 

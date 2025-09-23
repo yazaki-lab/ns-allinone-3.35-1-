@@ -1,9 +1,13 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+from datetime import datetime
+
+# タイムスタンプ作成（例: 20250923_145930）
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # CSVファイルのパス
 file1 = "random_AP2user5_09231259.csv"
-file2 = "myargo_AP2user5_09231242.csv"
+file2 = "myargo_AP2user5_09231356.csv"
 
 # データ読み込み
 df1 = pd.read_csv(file1)
@@ -36,7 +40,7 @@ plt.title("Boxplot of Improvement Rate")
 plt.ylabel("Improvement Rate (%)")
 plt.grid(True, linestyle="--", alpha=0.6)
 plt.legend()
-plt.savefig("boxplot_improvement.png", dpi=300, bbox_inches="tight")
+plt.savefig(f"boxplot_improvement_{timestamp}.png", dpi=300, bbox_inches="tight")
 plt.close()
 
 # ======================
@@ -63,7 +67,7 @@ plt.title("Boxplot of Total Position Variance")
 plt.ylabel("Total Position Variance")
 plt.grid(True, linestyle="--", alpha=0.6)
 plt.legend()
-plt.savefig("boxplot_variance.png", dpi=300, bbox_inches="tight")
+plt.savefig(f"boxplot_variance_{timestamp}.png", dpi=300, bbox_inches="tight")
 plt.close()
 
 # ======================
@@ -77,7 +81,7 @@ plt.xlabel("Improvement Rate (%)")
 plt.ylabel("Frequency")
 plt.grid(True, linestyle="--", alpha=0.6)
 plt.legend()
-plt.savefig("hist_improvement.png", dpi=300, bbox_inches="tight")
+plt.savefig(f"hist_improvement_{timestamp}.png", dpi=300, bbox_inches="tight")
 plt.close()
 
 # ======================
@@ -91,5 +95,5 @@ plt.xlabel("Total Position Variance")
 plt.ylabel("Frequency")
 plt.grid(True, linestyle="--", alpha=0.6)
 plt.legend()
-plt.savefig("hist_variance.png", dpi=300, bbox_inches="tight")
+plt.savefig(f"hist_variance_{timestamp}.png", dpi=300, bbox_inches="tight")
 plt.close()
