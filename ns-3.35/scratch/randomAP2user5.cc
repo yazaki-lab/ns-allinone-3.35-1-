@@ -16,20 +16,17 @@
 #include "ns3/mobility-module.h"
 #include "ns3/wifi-module.h"
 #include "ns3/internet-module.h"
-#include "ns3/flow-monitor-module.h"
-#include "ns3/netanim-module.h"
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE("WiFiRandomMovement");
+NS_LOG_COMPONENT_DEFINE("WiFiAPSelection");
 
-// 構造体定義（元のコードと同じ）
+// 構造体定義
 struct APInfo {
     uint32_t apId;
     Vector position;
     uint32_t connectedUsers;
     double channelUtilization;
-    std::vector<double> userRates;
     uint32_t channel;
     double totalThroughput; 
 };
@@ -40,178 +37,143 @@ struct UserInfo {
     Vector initialPosition; 
     uint32_t connectedAP;
     double throughput;
-    double throughputThreshold;
-    bool hasReachedThreshold;
     bool isNewUser;
-    Vector targetPosition;  // ランダム移動の目標位置
-    bool hasReachedTarget;  // 目標位置に到達したかどうか
-    double movementDistance; // 移動距離を追加
+    double movementDistance;
+    bool hasMovedRandomly;
 };
 
-// 位置分散計算構造体を追加
-struct PositionVariance {
-    double varianceX;
-    double varianceY;
-    double totalVariance;
-    Vector centerPosition;
-};
-
-// ランダム移動モデル
-class RandomMobilityModel : public MobilityModel {
+// 軽量化されたランダム移動モビリティモデル
+class LightweightMobilityModel : public MobilityModel {
 private:
     Vector m_currentPosition;
     Vector m_targetPosition;
-    Vector m_initialPosition;
-    double m_speed;
-    EventId m_moveEvent;
-    Time m_moveInterval;
-    bool m_isMoving;
     bool m_targetReached;
-    double m_movementRadius;
-    std::mt19937 m_rng;
+    bool m_hasStartedMovement;
     
 public:
     static TypeId GetTypeId(void) {
-        static TypeId tid = TypeId("RandomMobilityModel")
+        static TypeId tid = TypeId("LightweightMobilityModel")
             .SetParent<MobilityModel>()
             .SetGroupName("Mobility")
-            .AddConstructor<RandomMobilityModel>()
-            .AddAttribute("Speed", "移動速度 (m/s)",
-                         DoubleValue(1.0),
-                         MakeDoubleAccessor(&RandomMobilityModel::m_speed),
-                         MakeDoubleChecker<double>())
-            .AddAttribute("MoveInterval", "移動更新間隔",
-                         TimeValue(Seconds(0.1)),
-                         MakeTimeAccessor(&RandomMobilityModel::m_moveInterval),
-                         MakeTimeChecker())
-            .AddAttribute("MovementRadius", "移動許容半径 (m)",
-                         DoubleValue(15.0),
-                         MakeDoubleAccessor(&RandomMobilityModel::m_movementRadius),
-                         MakeDoubleChecker<double>());
+            .AddConstructor<LightweightMobilityModel>();
         return tid;
     }
     
-    RandomMobilityModel() : m_speed(1.0), m_moveInterval(Seconds(0.1)), 
-                           m_isMoving(false), m_targetReached(false), 
-                           m_movementRadius(15.0), m_rng(std::random_device{}()) {}
+    LightweightMobilityModel() : m_targetReached(false), m_hasStartedMovement(false) {}
     
-    void SetMovementRadius(double radius) {
-        m_movementRadius = radius;
-    }
-    
-    void StartRandomMovement() {
-        m_initialPosition = m_currentPosition;
-        GenerateRandomTarget();
-        m_isMoving = true;
-        m_targetReached = false;
-        ScheduleMove();
-    }
-    
-    void StopMoving() {
-        m_isMoving = false;
+    void SetRandomTarget(double maxDistance, double environmentSize) {
+        if (m_hasStartedMovement) return;
+        
+        static std::mt19937 rng(static_cast<unsigned int>(time(nullptr)) + reinterpret_cast<uintptr_t>(this));
+        std::uniform_real_distribution<double> distanceDist(0.0, maxDistance);
+        std::uniform_real_distribution<double> angleDist(0.0, 2 * M_PI);
+        
+        double randomDistance = distanceDist(rng);
+        double randomAngle = angleDist(rng);
+        
+        Vector targetPos;
+        targetPos.x = m_currentPosition.x + randomDistance * cos(randomAngle);
+        targetPos.y = m_currentPosition.y + randomDistance * sin(randomAngle);
+        targetPos.z = 0.0;
+        
+        targetPos.x = std::max(0.0, std::min(environmentSize, targetPos.x));
+        targetPos.y = std::max(0.0, std::min(environmentSize, targetPos.y));
+        
+        m_targetPosition = targetPos;
+        m_hasStartedMovement = true;
+        
+        // 即座に目標位置に移動（連続的な移動の代わりに）
+        SetPosition(m_targetPosition);
         m_targetReached = true;
-        if (m_moveEvent.IsRunning()) {
-            Simulator::Cancel(m_moveEvent);
-        }
     }
     
     bool HasReachedTarget() const { return m_targetReached; }
-    bool IsMoving() const { return m_isMoving; }
-    Vector GetTargetPosition() const { return m_targetPosition; }
+    bool HasStartedMovement() const { return m_hasStartedMovement; }
     
 private:
-    void GenerateRandomTarget() {
-        std::uniform_real_distribution<double> angleDist(0, 2 * M_PI);
-        std::uniform_real_distribution<double> radiusDist(0, m_movementRadius);
-        
-        double angle = angleDist(m_rng);
-        double radius = radiusDist(m_rng);
-        
-        Vector target = m_initialPosition;
-        target.x += radius * cos(angle);
-        target.y += radius * sin(angle);
-        
-        // 境界チェック（0-30mの範囲内に制限）
-        target.x = std::max(0.0, std::min(30.0, target.x));
-        target.y = std::max(0.0, std::min(30.0, target.y));
-        
-        m_targetPosition = target;
-    }
-    
-    void ScheduleMove() {
-        if (!m_isMoving) return;
-        m_moveEvent = Simulator::Schedule(m_moveInterval, &RandomMobilityModel::DoMove, this);
-    }
-    
-    void DoMove() {
-        Vector direction = m_targetPosition - m_currentPosition;
-        double distance = sqrt(direction.x * direction.x + direction.y * direction.y);
-        
-        if (distance > 1.0) {
-            direction.x /= distance;
-            direction.y /= distance;
-            direction.z = 0;
-            
-            double moveDistance = m_speed * m_moveInterval.GetSeconds();
-            
-            Vector newPosition = m_currentPosition;
-            newPosition.x += direction.x * moveDistance;
-            newPosition.y += direction.y * moveDistance;
-            
-            // 境界チェック
-            newPosition.x = std::max(0.0, std::min(30.0, newPosition.x));
-            newPosition.y = std::max(0.0, std::min(30.0, newPosition.y));
-            
-            SetPosition(newPosition);
-            ScheduleMove();
-        } else {
-            m_targetReached = true;
-            m_isMoving = false;
-        }
-    }
-    
     virtual Vector DoGetPosition() const { return m_currentPosition; }
     virtual void DoSetPosition(const Vector& position) {
         m_currentPosition = position;
         NotifyCourseChange();
     }
     virtual Vector DoGetVelocity() const {
-        if (!m_isMoving) return Vector(0, 0, 0);
-        
-        Vector direction = m_targetPosition - m_currentPosition;
-        double distance = sqrt(direction.x * direction.x + direction.y * direction.y);
-        
-        if (distance > 0) {
-            direction.x = (direction.x / distance) * m_speed;
-            direction.y = (direction.y / distance) * m_speed;
-            direction.z = 0;
-        }
-        
-        return direction;
+        return Vector(0, 0, 0);
     }
 };
 
-// 最短距離AP選択アルゴリズム
-class NearestAPSelection {
+// 軽量化されたAPセレクションアルゴリズム  
+class LightweightAPSelection {
+private:
+    std::vector<APInfo> m_apList;
+    double m_dThreshold;
+    
+    // 距離計算結果をキャッシュ
+    std::map<std::pair<uint32_t, uint32_t>, double> m_distanceCache;
+
 public:
-    uint32_t SelectNearestAP(const Vector& userPos, const std::vector<APInfo>& apList) {
+    LightweightAPSelection(double dTh = 25.0) : m_dThreshold(dTh) {}
+
+    void UpdateAPInfo(const std::vector<APInfo>& apList) { 
+        m_apList = apList; 
+        m_distanceCache.clear(); // キャッシュクリア
+    }
+
+    double CalculateDistance(const Vector& pos1, const Vector& pos2) {
+        return sqrt(pow(pos1.x - pos2.x, 2) + pow(pos1.y - pos2.y, 2));
+    }
+
+    double CalculateTransmissionRate(double distance) {
+        if (distance < 5.0) return 150.0;
+        else if (distance < 10.0) return 130.0;
+        else if (distance < 15.0) return 100.0;
+        else if (distance < 20.0) return 65.0;
+        else if (distance < 25.0) return 30.0;
+        else return 6.5;
+    }
+
+    // シンプルなスループット計算
+    double CalculateThroughput(const APInfo& ap, double transmissionRate) {
+        return transmissionRate * (1.0 - ap.channelUtilization) / std::max(1.0, (double)ap.connectedUsers);
+    }
+
+    uint32_t SelectOptimalAP(const Vector& userPos) {
+        uint32_t bestAP = 0;
+        double bestScore = -1.0;
+
+        for (const auto& ap : m_apList) {
+            double distance = CalculateDistance(userPos, ap.position);
+            
+            // 距離制限チェック
+            if (distance > m_dThreshold) continue;
+            
+            double transmissionRate = CalculateTransmissionRate(distance);
+            double throughput = CalculateThroughput(ap, transmissionRate);
+            
+            // シンプルなスコア計算（スループット重視）
+            double score = throughput / (1.0 + distance * 0.1);
+            
+            if (score > bestScore) {
+                bestScore = score;
+                bestAP = ap.apId;
+            }
+        }
+
+        return bestAP;
+    }
+    
+    uint32_t SelectNearestAP(const Vector& userPos) {
         double minDistance = 1e9;
-        uint32_t selectedAP = 0;
+        uint32_t nearestAP = 0;
         
-        for (const auto& ap : apList) {
+        for (const auto& ap : m_apList) {
             double distance = CalculateDistance(userPos, ap.position);
             if (distance < minDistance) {
                 minDistance = distance;
-                selectedAP = ap.apId;
+                nearestAP = ap.apId;
             }
         }
         
-        return selectedAP;
-    }
-    
-private:
-    double CalculateDistance(const Vector& pos1, const Vector& pos2) {
-        return sqrt(pow(pos1.x - pos2.x, 2) + pow(pos1.y - pos2.y, 2));
+        return nearestAP;
     }
 };
 
@@ -225,12 +187,14 @@ static uint32_t g_nNewUsers = 0;
 static uint32_t g_nExistingUsers = 0;
 static double g_simTime = 0.0;
 static double g_movementRadius = 0.0;
-static double g_requiredThroughput = 0.0;
-static NearestAPSelection* g_nearestAPSelector = nullptr;
+static double g_environmentSize = 50.0;
+static LightweightAPSelection* g_algorithm = nullptr;
 static std::vector<APInfo> g_apInfoList;
 static std::vector<UserInfo> g_userInfoList;
-static std::vector<Ptr<RandomMobilityModel>> g_userMobilityModels;
+static std::vector<Ptr<LightweightMobilityModel>> g_userMobilityModels;
 static std::string g_sessionDir = "";
+static std::mt19937 g_randomEngine;
+static std::uniform_real_distribution<double> g_positionDistribution(0.0, 50.0);
 
 // 出力関数
 void PrintMessage(const std::string& message) {
@@ -247,79 +211,110 @@ void PrintMessage(const std::string& message) {
     PrintMessage(oss.str()); \
 } while(0)
 
-// 位置の分散を計算する関数
-PositionVariance CalculatePositionVariance() {
-    PositionVariance variance;
-    
-    if (g_userInfoList.empty()) {
-        variance.varianceX = 0.0;
-        variance.varianceY = 0.0;
-        variance.totalVariance = 0.0;
-        variance.centerPosition = Vector(0.0, 0.0, 0.0);
-        return variance;
-    }
-    
-    // 中心位置（重心）を計算
-    double sumX = 0.0, sumY = 0.0;
-    for (const auto& user : g_userInfoList) {
-        sumX += user.position.x;
-        sumY += user.position.y;
-    }
-    
-    variance.centerPosition.x = sumX / g_nUsers;
-    variance.centerPosition.y = sumY / g_nUsers;
-    variance.centerPosition.z = 0.0;
-    
-    // 分散を計算
-    double sumSquaredDeviationX = 0.0;
-    double sumSquaredDeviationY = 0.0;
-    
-    for (const auto& user : g_userInfoList) {
-        double deviationX = user.position.x - variance.centerPosition.x;
-        double deviationY = user.position.y - variance.centerPosition.y;
-        
-        sumSquaredDeviationX += deviationX * deviationX;
-        sumSquaredDeviationY += deviationY * deviationY;
-    }
-    
-    variance.varianceX = sumSquaredDeviationX / g_nUsers;
-    variance.varianceY = sumSquaredDeviationY / g_nUsers;
-    variance.totalVariance = variance.varianceX + variance.varianceY;
-    
-    return variance;
+// タイムスタンプとディレクトリ作成
+std::string GetTimestamp() {
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[80];
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+    strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", timeinfo);
+    return std::string(buffer);
 }
 
-// スループット計算関数
-double CalculateCurrentThroughput(uint32_t userId, uint32_t apId) {
-    if (userId >= g_nUsers || apId >= g_nAPs) return 0.0;
-    
-    Vector userPos;
-    
-    // 新規ユーザーはMobilityModelから位置を取得、既存ユーザーは固定位置を使用
-    if (g_userInfoList[userId].isNewUser && g_userMobilityModels[userId]) {
-        userPos = g_userMobilityModels[userId]->GetPosition();
-    } else {
-        userPos = g_userInfoList[userId].position;
-    }
-    
-    Ptr<MobilityModel> apMobility = g_apNodes->Get(apId)->GetObject<MobilityModel>();
-    if (!apMobility) return 0.0;
-    
-    Vector apPos = apMobility->GetPosition();
-    double distance = sqrt(pow(userPos.x - apPos.x, 2) + pow(userPos.y - apPos.y, 2));
-    
-    double baseThroughput;
-    if (distance < 5.0) baseThroughput = 150.0;
-    else if (distance < 10.0) baseThroughput = 130.0;
-    else if (distance < 15.0) baseThroughput = 100.0;
-    else if (distance < 20.0) baseThroughput = 65.0;
-    else if (distance < 25.0) baseThroughput = 30.0;
-    else baseThroughput = 6.5;
-    
-    return baseThroughput * (1.0 - g_apInfoList[apId].channelUtilization);
+bool CreateDirectory(const std::string& path) {
+#ifdef _WIN32
+    return _mkdir(path.c_str()) == 0 || errno == EEXIST;
+#else
+    return mkdir(path.c_str(), 0777) == 0 || errno == EEXIST;
+#endif
 }
 
-// システム全体のスループットを計算する関数（調和平均）
+// ランダム位置生成
+Vector GenerateRandomPosition() {
+    double x = g_positionDistribution(g_randomEngine);
+    double y = g_positionDistribution(g_randomEngine);
+    return Vector(x, y, 0.0);
+}
+
+// 位置分散計算（簡略化）
+std::pair<double, double> CalculatePositionVariance() {
+    if (g_nUsers == 0) return {0.0, 0.0};
+    
+    double meanX = 0.0, meanY = 0.0;
+    double varX = 0.0, varY = 0.0;
+    
+    // 平均計算
+    for (uint32_t i = 0; i < g_nUsers; ++i) {
+        Vector pos = g_userInfoList[i].position;
+        meanX += pos.x;
+        meanY += pos.y;
+    }
+    meanX /= g_nUsers;
+    meanY /= g_nUsers;
+    
+    // 分散計算
+    for (uint32_t i = 0; i < g_nUsers; ++i) {
+        Vector pos = g_userInfoList[i].position;
+        varX += pow(pos.x - meanX, 2);
+        varY += pow(pos.y - meanY, 2);
+    }
+    varX /= g_nUsers;
+    varY /= g_nUsers;
+    
+    return {varX, varY};
+}
+
+// CSVファイル出力（詳細化）
+void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroughput) {
+    std::string csvDir = "results_csv";
+    CreateDirectory(csvDir);
+    
+    std::string csvFile = csvDir + "/random_AP" + std::to_string(g_nAPs) + "User" + std::to_string(g_nUsers) + "_09241538.csv";
+    
+    bool fileExists = false;
+    std::ifstream checkFile(csvFile);
+    if (checkFile.good()) {
+        fileExists = true;
+    }
+    checkFile.close();
+    
+    std::ofstream csvOutput(csvFile, std::ios::app);
+    
+    if (!fileExists) {
+        csvOutput << "Method,NewUserName,MovementRadius,RequiredThroughput,MovementDistance,ConnectedAP,FinalSystemThroughput,InitialSystemThroughput,ImprovementRate,PositionVarianceX,PositionVarianceY,TotalPositionVariance" << std::endl;
+    }
+    
+    auto variance = CalculatePositionVariance();
+    double totalVariance = variance.first + variance.second;
+    
+    // 各新規ユーザについて詳細な情報を出力
+    for (uint32_t i = 0; i < g_nNewUsers; ++i) {
+        if (g_userInfoList[i].isNewUser) {
+            double improvementRate = (initialSystemThroughput > 0.0) ? 
+                ((finalSystemThroughput - initialSystemThroughput) / initialSystemThroughput) * 100.0 : 0.0;
+            
+            csvOutput << std::fixed << std::setprecision(2);
+            csvOutput << "random," 
+                     << "User" << i << ","
+                     << g_movementRadius << ","
+                     << "N/A" << ","  // lightweightではrequiredThroughputが定義されていないため
+                     << g_userInfoList[i].movementDistance << ","
+                     << "AP" << g_userInfoList[i].connectedAP << ","
+                     << finalSystemThroughput << ","
+                     << initialSystemThroughput << ","
+                     << improvementRate << ","
+                     << variance.first << ","
+                     << variance.second << ","
+                     << totalVariance << std::endl;
+        }
+    }
+    
+    csvOutput.close();
+    OUTPUT("CSVファイルに結果を出力しました: " << csvFile << "\n");
+}
+
+// システム全体スループット計算（調和平均）
 double CalculateSystemThroughput() {
     if (g_apInfoList.empty()) return 0.0;
     
@@ -328,7 +323,6 @@ double CalculateSystemThroughput() {
         double apTotalThroughput = 0.0;
         int connectedUsers = 0;
         
-        // このAPに接続されているユーザーのスループットを合計
         for (uint32_t userId = 0; userId < g_nUsers; ++userId) {
             if (g_userInfoList[userId].connectedAP == apId) {
                 apTotalThroughput += g_userInfoList[userId].throughput;
@@ -358,260 +352,155 @@ double CalculateSystemThroughput() {
     return 0.0;
 }
 
-// ユーザ移動監視とAP接続更新
-void MonitorUserMovement() {
-    bool anyMoving = false;
+// スループット計算
+double CalculateCurrentThroughput(uint32_t userId, uint32_t apId) {
+    if (userId >= g_nUsers || apId >= g_nAPs) return 0.0;
+    
+    Vector userPos = g_userInfoList[userId].position;
+    Vector apPos = g_apInfoList[apId].position;
+    
+    double distance = sqrt(pow(userPos.x - apPos.x, 2) + pow(userPos.y - apPos.y, 2));
+    
+    double baseThroughput = g_algorithm->CalculateTransmissionRate(distance);
+    return baseThroughput * (1.0 - g_apInfoList[apId].channelUtilization);
+}
+
+// ユーザ移動更新（簡略化）
+void UpdateUserMovement() {
+    if (!g_algorithm || g_userMobilityModels.empty()) return;
     
     for (uint32_t i = 0; i < g_nUsers; ++i) {
         if (!g_userInfoList[i].isNewUser || !g_userMobilityModels[i]) continue;
         
-        if (g_userMobilityModels[i]->IsMoving()) {
-            anyMoving = true;
-            // 移動中の位置更新
-            Vector currentPos = g_userMobilityModels[i]->GetPosition();
-            g_userInfoList[i].position = currentPos;
-        } else if (!g_userInfoList[i].hasReachedTarget) {
-            // 移動停止時の処理
-            g_userInfoList[i].hasReachedTarget = true;
-            Vector finalPos = g_userMobilityModels[i]->GetPosition();
-            g_userInfoList[i].position = finalPos;
-            g_userInfoList[i].targetPosition = finalPos;
+        // ランダム移動をまだ開始していない場合は開始
+        if (!g_userMobilityModels[i]->HasStartedMovement()) {
+            g_userMobilityModels[i]->SetRandomTarget(g_movementRadius, g_environmentSize);
+            
+            Vector userPos = g_userMobilityModels[i]->GetPosition();
+            g_userInfoList[i].position = userPos;
             
             // 移動距離を計算
             Vector initialPos = g_userInfoList[i].initialPosition;
             g_userInfoList[i].movementDistance = sqrt(
-                pow(finalPos.x - initialPos.x, 2) + pow(finalPos.y - initialPos.y, 2));
+                pow(userPos.x - initialPos.x, 2) + pow(userPos.y - initialPos.y, 2));
             
-            // 最も近いAPを選択
-            uint32_t nearestAP = g_nearestAPSelector->SelectNearestAP(finalPos, g_apInfoList);
-            g_userInfoList[i].connectedAP = nearestAP;
-            
-            // スループット計算
-            double currentThroughput = CalculateCurrentThroughput(i, nearestAP);
+            // AP選択
+            uint32_t selectedAP = g_algorithm->SelectOptimalAP(userPos);
+            g_userInfoList[i].connectedAP = selectedAP;
+            double currentThroughput = CalculateCurrentThroughput(i, selectedAP);
             g_userInfoList[i].throughput = currentThroughput;
+            g_userInfoList[i].hasMovedRandomly = true;
             
-            OUTPUT("新規ユーザ" << i << ": 移動完了 位置(" 
-                   << std::fixed << std::setprecision(1) << finalPos.x << ", " << finalPos.y 
-                   << ") -> AP" << nearestAP << " 接続, スループット: " 
+            OUTPUT("新規ユーザ" << i << ": ランダム移動完了 最終位置(" 
+                   << std::fixed << std::setprecision(1) << userPos.x << ", " << userPos.y 
+                   << "), 移動距離: " << std::setprecision(2) << g_userInfoList[i].movementDistance 
+                   << "m -> AP" << selectedAP << " 接続, スループット: " 
                    << std::setprecision(2) << currentThroughput << "Mbps\n");
         }
     }
-    
-    if (anyMoving && Simulator::Now().GetSeconds() < g_simTime - 1.0) {
-        Simulator::Schedule(Seconds(0.5), &MonitorUserMovement);
-    }
 }
 
-// タイムスタンプとディレクトリ作成
-std::string GetTimestamp() {
-    time_t rawtime;
-    struct tm * timeinfo;
-    char buffer[80];
-    time(&rawtime);
-    timeinfo = localtime(&rawtime);
-    strftime(buffer, sizeof(buffer), "%Y%m%d_%H%M%S", timeinfo);
-    return std::string(buffer);
-}
-
-bool CreateDirectory(const std::string& path) {
-#ifdef _WIN32
-    return _mkdir(path.c_str()) == 0 || errno == EEXIST;
-#else
-    return mkdir(path.c_str(), 0777) == 0 || errno == EEXIST;
-#endif
-}
-
-// CSVファイルに結果を追加出力する関数（位置分散情報を追加）
-void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroughput) {
-    // 位置の分散を計算
-    PositionVariance posVariance = CalculatePositionVariance();
+// 動的なAP配置生成
+std::vector<Vector> GenerateAPPositions(uint32_t nAPs, double environmentSize) {
+    std::vector<Vector> positions;
     
-    // results_csvディレクトリの作成
-    std::string csvDir = "results_csv";
-    CreateDirectory(csvDir);
-    
-    std::string csvFile = csvDir + "/random_AP2user5_1114.csv";
-    
-    // ファイルが存在しない場合はヘッダーを追加
-    bool fileExists = false;
-    std::ifstream checkFile(csvFile);
-    if (checkFile.good()) {
-        fileExists = true;
-    }
-    checkFile.close();
-    
-    std::ofstream csvOutput(csvFile, std::ios::app); // 追記モード
-    
-    if (!fileExists) {
-        // ヘッダー行を追加（位置分散関連の列を追加）
-        csvOutput << "Method,NewUserName,MovementRadius,RequiredThroughput,MovementDistance,ConnectedAP,"
-                  << "FinalSystemThroughput,InitialSystemThroughput,ImprovementRate,"
-                  << "CenterX,CenterY,VarianceX,VarianceY,TotalVariance" << std::endl;
-    }
-    
-    // 新規ユーザーごとにデータを出力
-    for (uint32_t i = 0; i < g_nNewUsers; ++i) {
-        if (g_userInfoList[i].isNewUser) {
-            double improvementRate = (initialSystemThroughput > 0.0) ? 
-                ((finalSystemThroughput - initialSystemThroughput) / initialSystemThroughput) * 100.0 : 0.0;
-            
-            csvOutput << std::fixed << std::setprecision(2);
-            csvOutput << "random," 
-                     << "User" << i << ","
-                     << g_movementRadius << ","
-                     << g_requiredThroughput << ","
-                     << g_userInfoList[i].movementDistance << ","
-                     << "AP" << g_userInfoList[i].connectedAP << ","
-                     << finalSystemThroughput << ","
-                     << initialSystemThroughput << ","
-                     << improvementRate << ","
-                     << posVariance.centerPosition.x << ","
-                     << posVariance.centerPosition.y << ","
-                     << posVariance.varianceX << ","
-                     << posVariance.varianceY << ","
-                     << posVariance.totalVariance << std::endl;
+    if (nAPs == 1) {
+        positions.push_back(Vector(environmentSize/2, environmentSize/2, 0.0));
+    } else if (nAPs == 2) {
+        positions.push_back(Vector(environmentSize/4, environmentSize/2, 0.0));
+        positions.push_back(Vector(3*environmentSize/4, environmentSize/2, 0.0));
+    } else if (nAPs == 4) {
+        positions.push_back(Vector(environmentSize/4, environmentSize/4, 0.0));
+        positions.push_back(Vector(3*environmentSize/4, environmentSize/4, 0.0));
+        positions.push_back(Vector(environmentSize/4, 3*environmentSize/4, 0.0));
+        positions.push_back(Vector(3*environmentSize/4, 3*environmentSize/4, 0.0));
+    } else {
+        // 他のAP数に対する一般的な配置
+        double angle = 0.0;
+        double radius = environmentSize * 0.3;
+        Vector center(environmentSize/2, environmentSize/2, 0.0);
+        
+        for (uint32_t i = 0; i < nAPs; ++i) {
+            double x = center.x + radius * cos(angle);
+            double y = center.y + radius * sin(angle);
+            positions.push_back(Vector(x, y, 0.0));
+            angle += 2 * M_PI / nAPs;
         }
     }
     
-    csvOutput.close();
-    OUTPUT("CSVファイルに結果を出力しました: " << csvFile << "\n");
+    return positions;
 }
 
-// 初期状態表示
+// 動的な既存ユーザ配置生成
+std::vector<Vector> GenerateExistingUserPositions(uint32_t nExistingUsers, double environmentSize) {
+    std::vector<Vector> positions;
+    
+    if (nExistingUsers == 0) return positions;
+    
+    // グリッド配置を基本とする
+    uint32_t gridSize = (uint32_t)ceil(sqrt(nExistingUsers));
+    double spacing = environmentSize / (gridSize + 1);
+    
+    uint32_t index = 0;
+    for (uint32_t row = 0; row < gridSize && index < nExistingUsers; ++row) {
+        for (uint32_t col = 0; col < gridSize && index < nExistingUsers; ++col) {
+            double x = spacing * (col + 1);
+            double y = spacing * (row + 1);
+            positions.push_back(Vector(x, y, 0.0));
+            index++;
+        }
+    }
+    
+    return positions;
+}
+
+// 初期状態表示（簡略化）
 void PrintInitialState() {
-    OUTPUT("\n=== WiFi ランダム移動シミュレーション（比較用） ===\n");
+    OUTPUT("\n=== WiFi APセレクションシミュレーション（軽量化版）===\n");
     OUTPUT("AP数: " << g_nAPs << ", ユーザ数: " << g_nUsers);
     OUTPUT(" (新規:" << g_nNewUsers << ", 既存:" << g_nExistingUsers << ")\n");
     OUTPUT("シミュレーション時間: " << g_simTime << "秒\n");
     OUTPUT("移動許容距離: " << g_movementRadius << "m\n");
-    OUTPUT("選択方法: 最短距離AP選択\n");
+    OUTPUT("環境サイズ: " << g_environmentSize << "m×" << g_environmentSize << "m\n");
     
-    // 初期システムスループット
+    // 実験前のシステム全体のスループット
     double initialSystemThroughput = CalculateSystemThroughput();
-    OUTPUT("実験前システム全体スループット（調和平均）: " 
+    OUTPUT("\n実験前システム全体スループット（調和平均）: " 
            << std::fixed << std::setprecision(2) << initialSystemThroughput << " Mbps\n");
-    
-    // 新規ユーザーの目標位置を表示
-    OUTPUT("\n新規ユーザーの移動目標:\n");
-    for (uint32_t i = 0; i < g_nNewUsers; ++i) {
-        Vector target = g_userMobilityModels[i]->GetTargetPosition();
-        Vector initial = g_userInfoList[i].initialPosition;
-        double distance = sqrt(pow(target.x - initial.x, 2) + pow(target.y - initial.y, 2));
-        OUTPUT("ユーザ" << i << ": (" << std::fixed << std::setprecision(1) 
-               << initial.x << ", " << initial.y << ") -> (" 
-               << target.x << ", " << target.y << "), 距離: " 
-               << std::setprecision(2) << distance << "m\n");
-    }
-    
-    // 初期位置の分散を表示
-    PositionVariance initialVariance = CalculatePositionVariance();
-    OUTPUT("\n初期位置の分散:\n");
-    OUTPUT("重心位置: (" << std::fixed << std::setprecision(2) 
-           << initialVariance.centerPosition.x << ", " << initialVariance.centerPosition.y << ")\n");
-    OUTPUT("X方向分散: " << std::setprecision(2) << initialVariance.varianceX << "\n");
-    OUTPUT("Y方向分散: " << std::setprecision(2) << initialVariance.varianceY << "\n");
-    OUTPUT("総分散: " << std::setprecision(2) << initialVariance.totalVariance << "\n");
 }
 
 void StartUserMovement() {
-    OUTPUT("\n新規ユーザーのランダム移動を開始します。\n");
-    
-    // すべての新規ユーザーの移動を開始
-    for (uint32_t i = 0; i < g_nNewUsers; ++i) {
-        if (g_userMobilityModels[i]) {
-            g_userMobilityModels[i]->StartRandomMovement();
-        }
-    }
-    
-    MonitorUserMovement();
+    OUTPUT("\n新規ユーザのランダム移動を開始します。\n");
+    UpdateUserMovement();
 }
 
 // 最終結果表示
 void PrintFinalResults() {
     OUTPUT("\n=== シミュレーション完了 ===\n");
     OUTPUT("結果ディレクトリ: " << g_sessionDir << "\n");
-    OUTPUT("移動許容距離: " << g_movementRadius << "m\n");
-    OUTPUT("選択方法: 最短距離AP選択\n");
-    
-    // 最終位置とスループット表示
-    for (uint32_t i = 0; i < g_nUsers; ++i) {
-        if (g_userInfoList[i].isNewUser) {
-            Vector pos = g_userInfoList[i].position;
-            OUTPUT("新規ユーザ" << i << ": 最終位置(" << std::fixed << std::setprecision(1) 
-                   << pos.x << ", " << pos.y << "), 移動距離: " 
-                   << std::setprecision(2) << g_userInfoList[i].movementDistance 
-                   << "m, 接続AP: " << g_userInfoList[i].connectedAP
-                   << ", スループット: " << std::setprecision(2) 
-                   << g_userInfoList[i].throughput << "Mbps\n");
-        }
-    }
-    
-    // 最終位置の分散を表示
-    PositionVariance finalVariance = CalculatePositionVariance();
-    OUTPUT("\n最終位置の分散:\n");
-    OUTPUT("重心位置: (" << std::fixed << std::setprecision(2) 
-           << finalVariance.centerPosition.x << ", " << finalVariance.centerPosition.y << ")\n");
-    OUTPUT("X方向分散: " << std::setprecision(2) << finalVariance.varianceX << "\n");
-    OUTPUT("Y方向分散: " << std::setprecision(2) << finalVariance.varianceY << "\n");
-    OUTPUT("総分散: " << std::setprecision(2) << finalVariance.totalVariance << "\n");
     
     // システム全体スループット評価
     double finalSystemThroughput = CalculateSystemThroughput();
     
-    // 初期スループット計算（元のコードと同じ方法）
-    // 一時的にAPの情報をリセット
-    for (uint32_t apId = 0; apId < g_nAPs; ++apId) {
-        g_apInfoList[apId].totalThroughput = 0.0;
-        g_apInfoList[apId].connectedUsers = 0;
-    }
-    
-    // 初期位置での各ユーザーのスループットを計算
-    for (uint32_t i = 0; i < g_nUsers; ++i) {
-        Vector initialPos = g_userInfoList[i].initialPosition;
-        uint32_t initialConnectedAP;
-        
-        if (g_userInfoList[i].isNewUser) {
-            // 新規ユーザーの場合、初期位置での最短距離AP選択
-            initialConnectedAP = g_nearestAPSelector->SelectNearestAP(initialPos, g_apInfoList);
-        } else {
-            // 既存ユーザーの場合、現在の接続APを使用
-            initialConnectedAP = g_userInfoList[i].connectedAP;
-        }
-        
-        // 初期位置でのスループット計算
-        Vector apPos = g_apNodes->Get(initialConnectedAP)->GetObject<MobilityModel>()->GetPosition();
-        double distance = sqrt(pow(initialPos.x - apPos.x, 2) + pow(initialPos.y - apPos.y, 2));
-        
-        double baseThroughput;
-        if (distance < 5.0) baseThroughput = 150.0;
-        else if (distance < 10.0) baseThroughput = 130.0;
-        else if (distance < 15.0) baseThroughput = 100.0;
-        else if (distance < 20.0) baseThroughput = 65.0;
-        else if (distance < 25.0) baseThroughput = 30.0;
-        else baseThroughput = 6.5;
-        
-        double channelEffect = 1.0 - g_apInfoList[initialConnectedAP].channelUtilization;
-        double initialThroughput = baseThroughput * channelEffect;
-        
-        // APごとの総スループットに追加
-        g_apInfoList[initialConnectedAP].totalThroughput += initialThroughput;
-        g_apInfoList[initialConnectedAP].connectedUsers++;
-    }
-    
-    // 実験前の調和平均を計算
-    double harmonicSum = 0.0;
-    int activeAPs = 0;
-    
-    for (const auto& ap : g_apInfoList) {
-        if (ap.totalThroughput > 0.0) {
-            harmonicSum += 1.0 / ap.totalThroughput;
-            activeAPs++;
-        }
-    }
-    
+    // 初期スループット計算（簡略化）
     double initialSystemThroughput = 0.0;
-    if (harmonicSum > 0.0 && activeAPs > 0) {
-        initialSystemThroughput = activeAPs / harmonicSum;
+    for (uint32_t apId = 0; apId < g_nAPs; ++apId) {
+        double apThroughput = 0.0;
+        for (uint32_t i = 0; i < g_nUsers; ++i) {
+            if (g_userInfoList[i].connectedAP == apId) {
+                Vector initialPos = g_userInfoList[i].initialPosition;
+                Vector apPos = g_apInfoList[apId].position;
+                double distance = sqrt(pow(initialPos.x - apPos.x, 2) + pow(initialPos.y - apPos.y, 2));
+                double baseThroughput = g_algorithm->CalculateTransmissionRate(distance);
+                apThroughput += baseThroughput * (1.0 - g_apInfoList[apId].channelUtilization);
+            }
+        }
+        if (apThroughput > 0.0) {
+            initialSystemThroughput += 1.0 / apThroughput;
+        }
+    }
+    if (initialSystemThroughput > 0.0) {
+        initialSystemThroughput = g_nAPs / initialSystemThroughput;
     }
 
     // 改善率の計算
@@ -619,7 +508,7 @@ void PrintFinalResults() {
     double improvementPercent = (initialSystemThroughput > 0.0) ? 
         (improvement / initialSystemThroughput) * 100.0 : 0.0;
     
-    OUTPUT("システム全体スループット（調和平均）: " 
+    OUTPUT("\nシステム全体スループット（調和平均）: " 
            << std::fixed << std::setprecision(2) << finalSystemThroughput << " Mbps\n");
     OUTPUT("初期システムスループット: " << std::setprecision(2) << initialSystemThroughput << " Mbps\n");
     OUTPUT("スループット改善量: " << std::setprecision(2) << improvement << " Mbps\n");
@@ -630,34 +519,44 @@ void PrintFinalResults() {
 }
 
 int main(int argc, char *argv[]) {
-    // パラメータ設定（元のコードと同じ）
+    // パラメータ設定（動的に変更可能）
     uint32_t nAPs = 2;
     uint32_t nNewUsers = 2;
     uint32_t nExistingUsers = 3;
     uint32_t nUsers = nNewUsers + nExistingUsers;
-    double simTime = 30.0;
-    double movementRadius = 15.0;
-    double requiredThroughput = 90.0;
+    double simTime = 30.0; // 短縮
+    double movementRadius = 5.0;
+    double environmentSize = 30.0;
 
     // コマンドライン引数の処理
     CommandLine cmd;
+    cmd.AddValue("nAPs", "AP数", nAPs);
+    cmd.AddValue("nNewUsers", "新規ユーザ数", nNewUsers);
+    cmd.AddValue("nExistingUsers", "既存ユーザ数", nExistingUsers);
     cmd.AddValue("movementRadius", "移動許容距離 (m)", movementRadius);
-    cmd.AddValue("requiredThroughput", "要求スループット (Mbps)", requiredThroughput);
     cmd.AddValue("simTime", "シミュレーション時間 (秒)", simTime);
+    cmd.AddValue("environmentSize", "環境サイズ (m)", environmentSize);
     cmd.Parse(argc, argv);
 
+    nUsers = nNewUsers + nExistingUsers;
+    
+    // グローバル変数設定
     g_nAPs = nAPs;
     g_nUsers = nUsers;
     g_nNewUsers = nNewUsers;
     g_nExistingUsers = nExistingUsers;
     g_simTime = simTime;
     g_movementRadius = movementRadius;
-    g_requiredThroughput = requiredThroughput;
+    g_environmentSize = environmentSize;
+
+    // ランダム生成器の初期化
+    g_randomEngine.seed(static_cast<unsigned int>(time(nullptr)));
+    g_positionDistribution = std::uniform_real_distribution<double>(0.0, environmentSize);
 
     // 出力ディレクトリ作成
     std::string outputDir = "results";
     CreateDirectory(outputDir);
-    g_sessionDir = outputDir + "/AP2User5_random_" + GetTimestamp();
+    g_sessionDir = outputDir + "/AP" + std::to_string(nAPs) + "User" + std::to_string(nUsers) + "_lightweight_" + GetTimestamp();
     CreateDirectory(g_sessionDir);
 
     std::ofstream outputFile(g_sessionDir + "/output.txt");
@@ -670,7 +569,7 @@ int main(int argc, char *argv[]) {
     g_apNodes = &apNodes;
     g_staNodes = &staNodes;
 
-    // WiFi設定（元のコードと同じ）
+    // 簡易WiFi設定
     WifiHelper wifi;
     wifi.SetStandard(WIFI_STANDARD_80211a);
     wifi.SetRemoteStationManager("ns3::IdealWifiManager");
@@ -692,10 +591,12 @@ int main(int argc, char *argv[]) {
     // 移動端末設定
     MobilityHelper mobility;
     
-    // AP配置（元のコードと同じ）
+    // 動的AP配置
+    std::vector<Vector> apPositions = GenerateAPPositions(nAPs, environmentSize);
     Ptr<ListPositionAllocator> apPositionAlloc = CreateObject<ListPositionAllocator>();
-    apPositionAlloc->Add(Vector(15.0, 15.0, 0.0));
-    apPositionAlloc->Add(Vector(5.0, 5.0, 0.0));
+    for (const auto& pos : apPositions) {
+        apPositionAlloc->Add(pos);
+    }
     
     mobility.SetPositionAllocator(apPositionAlloc);
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -704,46 +605,44 @@ int main(int argc, char *argv[]) {
     // ユーザ配置
     g_userMobilityModels.resize(nUsers);
     
-    // 新規ユーザの設定（ランダム移動モデル）
+    // 新規ユーザの設定
     for (uint32_t i = 0; i < nNewUsers; ++i) {
-        Ptr<RandomMobilityModel> randomMobility = CreateObject<RandomMobilityModel>();
-        Vector initialPos = (i == 0) ? Vector(25.0, 0.0, 0.0) : Vector(0.0, 25.0, 0.0);
-        randomMobility->SetPosition(initialPos);
-        randomMobility->SetAttribute("Speed", DoubleValue(3.0));
-        randomMobility->SetMovementRadius(movementRadius);
-        staNodes.Get(i)->AggregateObject(randomMobility);
-        g_userMobilityModels[i] = randomMobility;
+        Ptr<LightweightMobilityModel> lightweightMobility = CreateObject<LightweightMobilityModel>();
+        
+        Vector initialPos = GenerateRandomPosition();
+        lightweightMobility->SetPosition(initialPos);
+        staNodes.Get(i)->AggregateObject(lightweightMobility);
+        g_userMobilityModels[i] = lightweightMobility;
     }
     
-    // 既存ユーザの設定（固定位置、元のコードと同じ）
+    // 既存ユーザの設定
+    std::vector<Vector> existingUserPositions = GenerateExistingUserPositions(nExistingUsers, environmentSize);
     for (uint32_t i = nNewUsers; i < nUsers; ++i) {
         Ptr<ConstantPositionMobilityModel> constantMobility = CreateObject<ConstantPositionMobilityModel>();
-        Vector fixedPos;
-        if (i == 2) fixedPos = Vector(12.0, 8.0, 0.0);
-        else if (i == 3) fixedPos = Vector(8.0, 12.0, 0.0);
-        else if (i == 4) fixedPos = Vector(20.0, 20.0, 0.0);
-        
+        Vector fixedPos = existingUserPositions[i - nNewUsers];
         constantMobility->SetPosition(fixedPos);
         staNodes.Get(i)->AggregateObject(constantMobility);
         g_userMobilityModels[i] = nullptr;
     }
 
-    // AP情報を初期化（元のコードと同じ）
+    // AP情報を動的に初期化
     g_apInfoList.resize(nAPs);
-    
-    g_apInfoList[0].apId = 0;
-    g_apInfoList[0].position = Vector(15.0, 15.0, 0.0);
-    g_apInfoList[0].connectedUsers = 0;
-    g_apInfoList[0].channelUtilization = 0.2; // 20%
-    g_apInfoList[0].channel = 0;
-    g_apInfoList[0].totalThroughput = 0.0;
+    for (uint32_t apId = 0; apId < nAPs; ++apId) {
+        g_apInfoList[apId].apId = apId;
+        g_apInfoList[apId].position = apPositions[apId];
+        g_apInfoList[apId].connectedUsers = 0;
+        g_apInfoList[apId].channel = apId;
+        g_apInfoList[apId].totalThroughput = 0.0;
+        g_apInfoList[apId].channelUtilization = 0.2 + (apId * 0.1);
+        if (g_apInfoList[apId].channelUtilization > 0.6) {
+            g_apInfoList[apId].channelUtilization = 0.6;
+        }
+    }
 
-    g_apInfoList[1].apId = 1;
-    g_apInfoList[1].position = Vector(5.0, 5.0, 0.0);
-    g_apInfoList[1].connectedUsers = 0;
-    g_apInfoList[1].channelUtilization = 0.6; // 60%
-    g_apInfoList[1].channel = 1;
-    g_apInfoList[1].totalThroughput = 0.0;
+    // アルゴリズム初期化
+    LightweightAPSelection algorithm(movementRadius);
+    algorithm.UpdateAPInfo(g_apInfoList);
+    g_algorithm = &algorithm;
 
     // ユーザ情報初期化
     g_userInfoList.resize(nUsers);
@@ -753,41 +652,28 @@ int main(int argc, char *argv[]) {
         g_userInfoList[i].userId = i;
         g_userInfoList[i].position = g_userMobilityModels[i]->GetPosition();
         g_userInfoList[i].initialPosition = g_userMobilityModels[i]->GetPosition();
-        g_userInfoList[i].connectedAP = 0; // 初期は適当に設定
-        g_userInfoList[i].throughput = 0.0;
-        g_userInfoList[i].throughputThreshold = requiredThroughput;
-        g_userInfoList[i].hasReachedThreshold = false;
+        g_userInfoList[i].connectedAP = g_algorithm->SelectNearestAP(g_userInfoList[i].initialPosition);
+        g_userInfoList[i].throughput = CalculateCurrentThroughput(i, g_userInfoList[i].connectedAP);
         g_userInfoList[i].isNewUser = true;
-        g_userInfoList[i].hasReachedTarget = false;
-        g_userInfoList[i].movementDistance = 0.0; // 初期化
+        g_userInfoList[i].movementDistance = 0.0;
+        g_userInfoList[i].hasMovedRandomly = false;
     }
     
-    // 既存ユーザの設定（元のコードと同じ）
+    // 既存ユーザの設定
     for (uint32_t i = nNewUsers; i < nUsers; ++i) {
         g_userInfoList[i].userId = i;
         g_userInfoList[i].position = staNodes.Get(i)->GetObject<MobilityModel>()->GetPosition();
         g_userInfoList[i].initialPosition = g_userInfoList[i].position;
-        // 既存ユーザのAP接続を決定（近いAPに接続）
-        double distToAP0 = sqrt(pow(g_userInfoList[i].position.x - g_apInfoList[0].position.x, 2) +
-                               pow(g_userInfoList[i].position.y - g_apInfoList[0].position.y, 2));
-        double distToAP1 = sqrt(pow(g_userInfoList[i].position.x - g_apInfoList[1].position.x, 2) +
-                               pow(g_userInfoList[i].position.y - g_apInfoList[1].position.y, 2));
-        g_userInfoList[i].connectedAP = (distToAP0 < distToAP1) ? 0 : 1;
+        g_userInfoList[i].connectedAP = g_algorithm->SelectNearestAP(g_userInfoList[i].position);
         g_userInfoList[i].throughput = CalculateCurrentThroughput(i, g_userInfoList[i].connectedAP);
-        g_userInfoList[i].throughputThreshold = 0.0;
-        g_userInfoList[i].hasReachedThreshold = true;
         g_userInfoList[i].isNewUser = false;
-        g_userInfoList[i].hasReachedTarget = true;
-        g_userInfoList[i].movementDistance = 0.0; // 既存ユーザは移動しない
+        g_userInfoList[i].movementDistance = 0.0;
+        g_userInfoList[i].hasMovedRandomly = true; // 既存ユーザは移動しない
     }
-
-    // 最短距離AP選択アルゴリズム初期化
-    NearestAPSelection nearestAPSelector;
-    g_nearestAPSelector = &nearestAPSelector;
 
     PrintInitialState();
 
-    // インターネットスタック（元のコードと同じ）
+    // インターネットスタック（軽量化）
     InternetStackHelper stack;
     stack.Install(apNodes);
     stack.Install(staNodes);
@@ -797,39 +683,12 @@ int main(int argc, char *argv[]) {
     Ipv4InterfaceContainer apInterfaces = address.Assign(apDevices);
     Ipv4InterfaceContainer staInterfaces = address.Assign(staDevices);
 
-    // UDPアプリケーション設定（FlowMonitor用）
-    UdpEchoServerHelper echoServer(9);
-    ApplicationContainer serverApps = echoServer.Install(apNodes.Get(0));
-    serverApps.Start(Seconds(1.0));
-    serverApps.Stop(Seconds(simTime));
-
-    UdpEchoClientHelper echoClient(apInterfaces.GetAddress(0), 9);
-    echoClient.SetAttribute("MaxPackets", UintegerValue(1000));
-    echoClient.SetAttribute("Interval", TimeValue(Seconds(0.1)));
-    echoClient.SetAttribute("PacketSize", UintegerValue(1024));
-
-    ApplicationContainer clientApps = echoClient.Install(staNodes);
-    clientApps.Start(Seconds(2.0));
-    clientApps.Stop(Seconds(simTime));
-
-    // FlowMonitor設定（統計情報収集用）
-    FlowMonitorHelper flowmon;
-    Ptr<FlowMonitor> monitor = flowmon.InstallAll();
-
-    // アニメーション設定
-    AnimationInterface anim(g_sessionDir + "/animation.xml");
-    anim.UpdateNodeColor(apNodes.Get(0), 0, 255, 0);   // AP0: 緑
-    anim.UpdateNodeColor(apNodes.Get(1), 0, 255, 255); // AP1: シアン
-    for (uint32_t i = 0; i < nUsers; ++i) {
-        anim.UpdateNodeColor(staNodes.Get(i), 
-                           g_userInfoList[i].isNewUser ? 255 : 0, 0, 
-                           g_userInfoList[i].isNewUser ? 0 : 255);
-        // 新規ユーザー: 赤, 既存ユーザー: 青
-    }
+    // アプリケーションは最小限に（軽量化のため削除またはシンプル化）
+    // FlowMonitorも削除して軽量化
 
     // シミュレーション実行
     Simulator::Stop(Seconds(simTime));
-    Simulator::Schedule(Seconds(3.0), &StartUserMovement);
+    Simulator::Schedule(Seconds(1.0), &StartUserMovement); // 早期開始
     
     Simulator::Run();
     PrintFinalResults();

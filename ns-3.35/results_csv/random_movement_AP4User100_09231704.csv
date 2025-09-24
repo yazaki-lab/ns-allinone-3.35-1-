@@ -1,0 +1,11 @@
+Method,NewUserName,MovementRadius,MovementDistance,ConnectedAP,FinalSystemThroughput,InitialSystemThroughput,ImprovementRate,PositionVarianceX,PositionVarianceY,TotalPositionVariance
+random_movement,User0,15.00,1.30,AP1,1815.18,1817.90,-0.15,162.59,143.63,306.22
+random_movement,User1,15.00,12.26,AP2,1815.18,1817.90,-0.15,162.59,143.63,306.22
+random_movement,User2,15.00,1.01,AP1,1815.18,1817.90,-0.15,162.59,143.63,306.22
+random_movement,User3,15.00,4.28,AP0,1815.18,1817.90,-0.15,162.59,143.63,306.22
+random_movement,User4,15.00,13.42,AP1,1815.18,1817.90,-0.15,162.59,143.63,306.22
+random_movement,User5,15.00,5.40,AP3,1815.18,1817.90,-0.15,162.59,143.63,306.22
+random_movement,User6,15.00,6.59,AP0,1815.18,1817.90,-0.15,162.59,143.63,306.22
+random_movement,User7,15.00,8.79,AP3,1815.18,1817.90,-0.15,162.59,143.63,306.22
+random_movement,User8,15.00,2.26,AP0,1815.18,1817.90,-0.15,162.59,143.63,306.22
+random_movement,User9,15.00,5.56,AP0,1815.18,1817.90,-0.15,162.59,143.63,306.22

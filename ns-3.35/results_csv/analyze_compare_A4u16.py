@@ -6,8 +6,8 @@ from datetime import datetime
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # CSVファイルのパス
-file1 = "random_AP4user16_1636.csv"
-file2 = "myargo_AP4user16_09231649.csv"
+file1 = "random_AP4user100_09241538.csv"
+file2 = "myargo_AP4user100_09241413.csv"
 
 # データ読み込み
 df1 = pd.read_csv(file1)
@@ -44,13 +44,13 @@ plt.savefig(f"boxplot_improvement_{timestamp}.png", dpi=300, bbox_inches="tight"
 plt.close()
 
 # ======================
-# 2. TotalPositionVariance の箱ひげ図
+# 2. MovementDistance の箱ひげ図
 # ======================
-variance1 = df1["TotalPositionVariance"]
-variance2 = df2["TotalPositionVariance"]
+distance1 = df1["MovementDistance"]
+distance2 = df2["MovementDistance"]
 
 plt.figure(figsize=(6, 5))
-plt.boxplot([variance1, variance2],
+plt.boxplot([distance1, distance2],
             tick_labels=["Random", "proposed"],
             patch_artist=True,
             boxprops=dict(facecolor="lightblue"),
@@ -58,42 +58,42 @@ plt.boxplot([variance1, variance2],
             positions=[1, 1.5],
             widths=0.35)
 
-means = [variance1.mean(), variance2.mean()]
+means = [distance1.mean(), distance2.mean()]
 plt.plot([1, 1.5], means, "D", color="green", label="Mean")
 for x, y in zip([1, 1.5], means):
     plt.text(x, y + 0.5, f"{y:.2f}", ha="center", va="bottom", color="green", fontsize=12)
 
-plt.title("Boxplot of Total Position Variance")
-plt.ylabel("Total Position Variance")
+plt.title("Boxplot of Total Travel Distance")
+plt.ylabel("Total Travel Distance")
 plt.grid(True, linestyle="--", alpha=0.6)
 plt.legend()
-plt.savefig(f"boxplot_variance_{timestamp}.png", dpi=300, bbox_inches="tight")
+plt.savefig(f"boxplot_travel_distance_{timestamp}.png", dpi=300, bbox_inches="tight")
 plt.close()
 
 # ======================
 # 3. ImprovementRate のヒストグラム
 # ======================
 plt.figure(figsize=(6, 5))
-plt.hist(improvement1, bins=20, alpha=0.6, label="Random", color="blue")
-plt.hist(improvement2, bins=20, alpha=0.6, label="proposed", color="orange")
+plt.hist(improvement1, bins=30, alpha=0.5, label="Random", color="blue")
+plt.hist(improvement2, bins=30, alpha=0.5, label="proposed", color="orange")
 plt.title("Histogram of Improvement Rate")
 plt.xlabel("Improvement Rate (%)")
 plt.ylabel("Frequency")
-plt.grid(True, linestyle="--", alpha=0.6)
+plt.grid(True, linestyle="--", alpha=0.5)
 plt.legend()
 plt.savefig(f"hist_improvement_{timestamp}.png", dpi=300, bbox_inches="tight")
 plt.close()
 
 # ======================
-# 4. TotalPositionVariance のヒストグラム
+# 4. MovementDistance のヒストグラム
 # ======================
 plt.figure(figsize=(6, 5))
-plt.hist(variance1, bins=20, alpha=0.6, label="Random", color="blue")
-plt.hist(variance2, bins=20, alpha=0.6, label="proposed", color="orange")
-plt.title("Histogram of Total Position Variance")
-plt.xlabel("Total Position Variance")
+plt.hist(distance1, bins=30, alpha=0.5, label="Random", color="blue")
+plt.hist(distance2, bins=30, alpha=0.5, label="proposed", color="orange")
+plt.title("Histogram of Total Travel Distance")
+plt.xlabel("Total Travel Distance")
 plt.ylabel("Frequency")
-plt.grid(True, linestyle="--", alpha=0.6)
+plt.grid(True, linestyle="--", alpha=0.5)
 plt.legend()
-plt.savefig(f"hist_variance_{timestamp}.png", dpi=300, bbox_inches="tight")
+plt.savefig(f"hist_travel_distance_{timestamp}.png", dpi=300, bbox_inches="tight")
 plt.close()

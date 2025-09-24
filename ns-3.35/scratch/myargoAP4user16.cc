@@ -43,7 +43,7 @@ struct UserInfo {
     bool hasReachedThreshold;
     bool isNewUser;
     double movementDistance;
-    Vector targetPosition;  // 目標位置を記録
+    Vector targetPosition;
 };
 
 struct APSelectionResult {
@@ -56,7 +56,7 @@ struct APSelectionResult {
     std::vector<std::pair<uint32_t, double>> allScores;
 };
 
-// 改善されたカスタム移動モデル
+// 改善されたカスタム移動モデル - より頻繁なチェック機能付き
 class APDirectedMobilityModel : public MobilityModel {
 private:
     Vector m_currentPosition;
@@ -66,7 +66,8 @@ private:
     Time m_moveInterval;
     bool m_isMoving;
     bool m_targetReached;
-    double m_tolerance;  // 目標到達の許容誤差
+    double m_tolerance;
+    std::function<bool()> m_shouldStopCallback; // 停止条件チェック用コールバック
     
 public:
     static TypeId GetTypeId(void) {
@@ -75,15 +76,15 @@ public:
             .SetGroupName("Mobility")
             .AddConstructor<APDirectedMobilityModel>()
             .AddAttribute("Speed", "移動速度 (m/s)",
-                         DoubleValue(3.0),  // 速度を3m/sに設定
+                         DoubleValue(1.0),
                          MakeDoubleAccessor(&APDirectedMobilityModel::m_speed),
                          MakeDoubleChecker<double>())
             .AddAttribute("MoveInterval", "移動更新間隔",
-                         TimeValue(Seconds(0.1)),
+                         TimeValue(Seconds(0.1)), 
                          MakeTimeAccessor(&APDirectedMobilityModel::m_moveInterval),
                          MakeTimeChecker())
             .AddAttribute("Tolerance", "目標到達許容誤差 (m)",
-                         DoubleValue(0.5),  // 許容誤差を0.5mに設定
+                         DoubleValue(0.5),
                          MakeDoubleAccessor(&APDirectedMobilityModel::m_tolerance),
                          MakeDoubleChecker<double>());
         return tid;
@@ -92,10 +93,14 @@ public:
     APDirectedMobilityModel() : m_speed(3.0), m_moveInterval(Seconds(0.1)), 
                                 m_isMoving(false), m_targetReached(false), m_tolerance(0.5) {}
     
+    // 停止条件チェック用コールバックを設定
+    void SetShouldStopCallback(std::function<bool()> callback) {
+        m_shouldStopCallback = callback;
+    }
+    
     void SetTargetPosition(const Vector& target) {
         m_targetPosition = target;
         m_targetReached = false;
-        // 新しい目標が設定された場合は常に移動を開始
         if (!m_isMoving) {
             StartMoving();
         }
@@ -128,12 +133,19 @@ private:
     }
     
     void DoMove() {
+        // **重要な修正1**: 移動前に停止条件をチェック
+        if (m_shouldStopCallback && m_shouldStopCallback()) {
+            m_isMoving = false;
+            m_targetReached = true;
+            return;
+        }
+        
         Vector direction = m_targetPosition - m_currentPosition;
         double distance = sqrt(direction.x * direction.x + direction.y * direction.y);
         
         // 許容誤差内に到達したかチェック
         if (distance <= m_tolerance) {
-            SetPosition(m_targetPosition);  // 正確に目標位置に設定
+            SetPosition(m_targetPosition);
             m_targetReached = true;
             m_isMoving = false;
             return;
@@ -158,11 +170,19 @@ private:
         newPosition.x += direction.x * moveDistance;
         newPosition.y += direction.y * moveDistance;
         
-        // 境界チェック（0-125mの範囲内に制限）
-        newPosition.x = std::max(0.0, std::min(125.0, newPosition.x));
-        newPosition.y = std::max(0.0, std::min(125.0, newPosition.y));
+        // 境界チェック（0-50mの範囲内に制限）
+        newPosition.x = std::max(0.0, std::min(50.0, newPosition.x));
+        newPosition.y = std::max(0.0, std::min(50.0, newPosition.y));
         
         SetPosition(newPosition);
+        
+        // **重要な修正2**: 移動後にも停止条件をチェック
+        if (m_shouldStopCallback && m_shouldStopCallback()) {
+            m_isMoving = false;
+            m_targetReached = true;
+            return;
+        }
+        
         ScheduleMove();
     }
     
@@ -359,7 +379,7 @@ static std::string g_sessionDir = "";
 
 // ランダム生成器
 static std::mt19937 g_randomEngine;
-static std::uniform_real_distribution<double> g_positionDistribution(0.0, 125.0);
+static std::uniform_real_distribution<double> g_positionDistribution(0.0, 50.0);
 
 void PrintMessage(const std::string& message) {
     std::cout << message;
@@ -436,7 +456,7 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     std::string csvDir = "results_csv";
     CreateDirectory(csvDir);
     
-    std::string csvFile = csvDir + "/myargo_AP4user16_09231649.csv";
+    std::string csvFile = csvDir + "/myargo_AP4user16_09241413.csv";
     
     bool fileExists = false;
     std::ifstream checkFile(csvFile);
@@ -542,42 +562,36 @@ double CalculateCurrentThroughput(uint32_t userId, uint32_t apId) {
     return baseThroughput * (1.0 - g_apInfoList[apId].channelUtilization);
 }
 
-// 改善された目標位置計算関数
 Vector CalculateOptimalTargetPosition(const Vector& currentPos, const Vector& apPos, uint32_t userId) {
-    // 目標距離を4mに設定（5m未満で150Mbpsを得るため）
-    double targetDistance = 4.0;
+    double targetDistance = 4.0; // 5m未満で150Mbpsを得るため
     
-    // APとユーザの現在位置の方向ベクトルを計算
     Vector direction = currentPos - apPos;
     double currentDistance = sqrt(direction.x * direction.x + direction.y * direction.y);
     
     Vector targetPosition;
     
     if (currentDistance > 0.1) {
-        // 方向ベクトルを正規化
         direction.x /= currentDistance;
         direction.y /= currentDistance;
         
-        // AP中心から目標距離の位置を計算
         targetPosition.x = apPos.x + direction.x * targetDistance;
         targetPosition.y = apPos.y + direction.y * targetDistance;
     } else {
-        // ほぼ同じ位置にいる場合は、ユーザIDベースの角度でオフセット
-        double angle = (userId * 60.0) * M_PI / 180.0; // 60度刻み
+        double angle = (userId * 60.0) * M_PI / 180.0;
         targetPosition.x = apPos.x + targetDistance * cos(angle);
         targetPosition.y = apPos.y + targetDistance * sin(angle);
     }
     
     targetPosition.z = 0.0;
     
-    // 境界チェック（0-125mの範囲内に制限）
-    targetPosition.x = std::max(0.0, std::min(125.0, targetPosition.x));
-    targetPosition.y = std::max(0.0, std::min(125.0, targetPosition.y));
+    // 境界チェック
+    targetPosition.x = std::max(0.0, std::min(50.0, targetPosition.x));
+    targetPosition.y = std::max(0.0, std::min(50.0, targetPosition.y));
     
     return targetPosition;
 }
 
-// 改善されたユーザ移動更新関数
+// **重要な修正3**: より頻繁なユーザ移動チェック（0.2秒間隔）
 void UpdateUserMovement() {
     if (!g_algorithm || g_userMobilityModels.empty()) return;
     
@@ -598,64 +612,115 @@ void UpdateUserMovement() {
         g_userInfoList[i].movementDistance = sqrt(
             pow(userPos.x - initialPos.x, 2) + pow(userPos.y - initialPos.y, 2));
         
-        // 移動許容距離チェック
+        // AP選択とスループット計算
+        APSelectionResult result = g_algorithm->SelectOptimalAPDetailed(userPos, i);
+        double currentThroughput = CalculateCurrentThroughput(i, result.selectedAP);
+        g_userInfoList[i].throughput = currentThroughput;
+        g_userInfoList[i].connectedAP = result.selectedAP;
+        
+        // **最重要修正**: スループット閾値チェックを最優先
+        if (currentThroughput >= g_userInfoList[i].throughputThreshold) {
+            g_userInfoList[i].hasReachedThreshold = true;
+            g_userMobilityModels[i]->StopMoving();
+            
+            OUTPUT("新規ユーザ" << i << ": 要求スループット達成！ 位置(" 
+                   << std::fixed << std::setprecision(1) << userPos.x << ", " << userPos.y 
+                   << ") -> AP" << result.selectedAP << " 接続, スループット: " 
+                   << std::setprecision(2) << currentThroughput << "Mbps (移動距離: " 
+                   << g_userInfoList[i].movementDistance << "m)\n");
+            continue;
+        }
+        
+        // 移動距離制限チェック（スループットが達成されていない場合のみ）
         if (g_userInfoList[i].movementDistance >= g_movementRadius) {
             OUTPUT("新規ユーザ" << i << ": 移動許容距離に到達 (" 
                    << std::setprecision(2) << g_userInfoList[i].movementDistance 
-                   << "m >= " << g_movementRadius << "m), 移動停止\n");
+                   << "m >= " << g_movementRadius << "m), 移動停止 (スループット: "
+                   << currentThroughput << "Mbps)\n");
             g_userInfoList[i].hasReachedThreshold = true;
             g_userMobilityModels[i]->StopMoving();
             continue;
         }
         
-        // AP選択
-        APSelectionResult result = g_algorithm->SelectOptimalAPDetailed(userPos, i);
-        double currentThroughput = CalculateCurrentThroughput(i, result.selectedAP);
-        g_userInfoList[i].throughput = currentThroughput;
-        
-        // スループット閾値チェック
-        if (currentThroughput >= g_userInfoList[i].throughputThreshold) {
-            g_userInfoList[i].hasReachedThreshold = true;
-            g_userMobilityModels[i]->StopMoving();
-            
-            OUTPUT("新規ユーザ" << i << ": 要求スループット達成 位置(" 
-                   << std::fixed << std::setprecision(1) << userPos.x << ", " << userPos.y 
-                   << ") -> AP" << result.selectedAP << " 接続, スループット: " 
-                   << std::setprecision(2) << currentThroughput << "Mbps\n");
+        // 移動継続の場合
+        if (g_userMobilityModels[i]->IsMoving()) {
+            anyMoving = true;
         } else {
-            // 目標位置を設定して移動継続
+            // 停止している場合、新しい目標を設定
             Ptr<MobilityModel> targetAPMobility = g_apNodes->Get(result.selectedAP)->GetObject<MobilityModel>();
             if (targetAPMobility) {
                 Vector apPos = targetAPMobility->GetPosition();
                 Vector targetPosition = CalculateOptimalTargetPosition(userPos, apPos, i);
                 
-                // 目標位置が変更された場合のみ更新
-                Vector currentTarget = g_userInfoList[i].targetPosition;
-                double targetDistance = sqrt(pow(targetPosition.x - currentTarget.x, 2) + 
-                                           pow(targetPosition.y - currentTarget.y, 2));
+                g_userMobilityModels[i]->SetTargetPosition(targetPosition);
+                g_userInfoList[i].targetPosition = targetPosition;
                 
-                if (targetDistance > 1.0) {  // 1m以上の変更がある場合のみ更新
-                    g_userMobilityModels[i]->SetTargetPosition(targetPosition);
-                    g_userInfoList[i].targetPosition = targetPosition;
-                    g_userInfoList[i].connectedAP = result.selectedAP;
-                    
-                    OUTPUT("新規ユーザ" << i << ": 新目標設定 現在位置(" 
-                           << std::setprecision(1) << userPos.x << ", " << userPos.y 
-                           << ") -> 目標位置(" << targetPosition.x << ", " << targetPosition.y 
-                           << ") AP" << result.selectedAP << " スループット: " 
-                           << std::setprecision(2) << currentThroughput << "Mbps\n");
-                }
+                OUTPUT("新規ユーザ" << i << ": 新目標設定 現在位置(" 
+                       << std::setprecision(1) << userPos.x << ", " << userPos.y 
+                       << ") -> 目標位置(" << targetPosition.x << ", " << targetPosition.y 
+                       << ") AP" << result.selectedAP << " スループット: " 
+                       << std::setprecision(2) << currentThroughput << "Mbps\n");
                 
                 anyMoving = true;
             }
         }
     }
-    
-    // 移動中のユーザがいて、シミュレーション時間内であれば継続
-    if (anyMoving && currentTime < g_simTime - 1.0) {
-        Simulator::Schedule(Seconds(1.0), &UpdateUserMovement);
+
+    // より頻繁なチェック（0.2秒間隔）で確実に停止
+    if (anyMoving && currentTime < g_simTime - 0.2) {
+        Simulator::Schedule(Seconds(0.2), &UpdateUserMovement);
     } else {
         OUTPUT("全ての新規ユーザの移動が完了しました。\n");
+    }
+}
+
+// **重要な修正5**: 各ユーザに個別の停止条件チェック関数を設定
+void SetupUserStopCallbacks() {
+    for (uint32_t i = 0; i < g_nNewUsers; ++i) {
+        if (g_userMobilityModels[i]) {
+            g_userMobilityModels[i]->SetShouldStopCallback([i]() -> bool {
+                // 既に閾値に達している場合は停止
+                if (g_userInfoList[i].hasReachedThreshold) {
+                    return true;
+                }
+                
+                // 現在位置を取得
+                Vector userPos = g_userMobilityModels[i]->GetPosition();
+                g_userInfoList[i].position = userPos;
+                
+                // 移動距離を更新
+                Vector initialPos = g_userInfoList[i].initialPosition;
+                g_userInfoList[i].movementDistance = sqrt(
+                    pow(userPos.x - initialPos.x, 2) + pow(userPos.y - initialPos.y, 2));
+                
+                // 移動距離制限チェック
+                if (g_userInfoList[i].movementDistance >= g_movementRadius) {
+                    g_userInfoList[i].hasReachedThreshold = true;
+                    OUTPUT("ユーザ" << i << ": 移動距離制限により停止 (" 
+                           << std::fixed << std::setprecision(2) << g_userInfoList[i].movementDistance 
+                           << "m)\n");
+                    return true;
+                }
+                
+                // スループットチェック
+                if (g_algorithm) {
+                    APSelectionResult result = g_algorithm->SelectOptimalAPDetailed(userPos, i);
+                    double currentThroughput = CalculateCurrentThroughput(i, result.selectedAP);
+                    g_userInfoList[i].throughput = currentThroughput;
+                    g_userInfoList[i].connectedAP = result.selectedAP;
+                    
+                    if (currentThroughput >= g_userInfoList[i].throughputThreshold) {
+                        g_userInfoList[i].hasReachedThreshold = true;
+                        OUTPUT("ユーザ" << i << ": スループット閾値達成により停止 (" 
+                               << std::setprecision(2) << currentThroughput << "Mbps >= " 
+                               << g_userInfoList[i].throughputThreshold << "Mbps)\n");
+                        return true;
+                    }
+                }
+                
+                return false;
+            });
+        }
     }
 }
 
@@ -666,7 +731,7 @@ void PrintInitialState() {
     OUTPUT("シミュレーション時間: " << g_simTime << "秒\n");
     OUTPUT("移動許容距離: " << g_movementRadius << "m\n");
     OUTPUT("要求スループット: " << g_requiredThroughput << "Mbps\n");
-    OUTPUT("環境サイズ: 125m×125m\n");
+    OUTPUT("環境サイズ: 50m×50m\n");
     
     for (uint32_t i = 0; i < g_nNewUsers; ++i) {
         Vector pos = g_userInfoList[i].initialPosition;
@@ -692,6 +757,7 @@ void PrintInitialState() {
 
 void StartUserMovement() {
     OUTPUT("\n新規ユーザの移動を開始します。\n");
+    SetupUserStopCallbacks(); // **重要**: 停止条件コールバックを設定
     UpdateUserMovement();
 }
 
@@ -700,7 +766,7 @@ void PrintFinalResults() {
     OUTPUT("結果ディレクトリ: " << g_sessionDir << "\n");
     OUTPUT("移動許容距離: " << g_movementRadius << "m\n");
     OUTPUT("要求スループット: " << g_requiredThroughput << "Mbps\n");
-    OUTPUT("環境サイズ: 125m×125m\n");
+    OUTPUT("環境サイズ: 50m×50m\n");
     
     for (uint32_t i = 0; i < g_nUsers; ++i) {
         if (g_userInfoList[i].isNewUser) {
@@ -785,13 +851,13 @@ void PrintFinalResults() {
 }
 
 int main(int argc, char *argv[]) {
-    uint32_t nAPs = 4;
-    uint32_t nNewUsers = 4;
-    uint32_t nExistingUsers = 12;
+    uint32_t nAPs = 4; // AP数
+    uint32_t nNewUsers = 10; // 新規ユーザ数
+    uint32_t nExistingUsers = 90; // 既存ユーザ数
     uint32_t nUsers = nNewUsers + nExistingUsers;
-    double simTime = 30.0;
-    double movementRadius = 15.0;
-    double requiredThroughput = 30.0;
+    double simTime = 30.0; // シミュレーション時間 (秒)
+    double movementRadius = 14.95; //移動許容距離 (m)
+    double requiredThroughput = 30.0; //要求スループット (Mbps)
 
     CommandLine cmd;
     cmd.AddValue("movementRadius", "移動許容距離 (m)", movementRadius);
@@ -862,6 +928,7 @@ int main(int argc, char *argv[]) {
         customMobility->SetPosition(initialPos);
         customMobility->SetAttribute("Speed", DoubleValue(3.0));
         customMobility->SetAttribute("Tolerance", DoubleValue(0.5));
+        customMobility->SetAttribute("MoveInterval", TimeValue(Seconds(0.05))); // **修正**: さらに細かい間隔に
         staNodes.Get(i)->AggregateObject(customMobility);
         g_userMobilityModels[i] = customMobility;
     }
@@ -924,7 +991,7 @@ int main(int argc, char *argv[]) {
         g_userInfoList[i].initialPosition = g_userMobilityModels[i]->GetPosition();
         
         g_userInfoList[i].connectedAP = g_algorithm->SelectNearestAP(g_userInfoList[i].initialPosition);
-        g_userInfoList[i].targetPosition = g_userInfoList[i].initialPosition;  // 目標位置を初期化
+        g_userInfoList[i].targetPosition = g_userInfoList[i].initialPosition;
         
         g_userInfoList[i].throughput = CalculateCurrentThroughput(i, g_userInfoList[i].connectedAP);
         g_userInfoList[i].throughputThreshold = requiredThroughput;
