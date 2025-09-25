@@ -1,0 +1,11 @@
+Method,NewUserName,MovementRadius,RequiredThroughput,MovementDistance,ConnectedAP,FinalSystemThroughput,InitialSystemThroughput,ImprovementRate,PositionVarianceX,PositionVarianceY,TotalPositionVariance
+myargo_bianchi,User0,14.95,30.00,0.00,AP0,299.66,0.23,127469.10,1251.14,83860.19,85111.33
+myargo_bianchi,User1,14.95,30.00,5.25,AP0,299.66,0.23,127469.10,1251.14,83860.19,85111.33
+myargo_bianchi,User2,14.95,30.00,0.00,AP0,299.66,0.23,127469.10,1251.14,83860.19,85111.33
+myargo_bianchi,User3,14.95,30.00,0.45,AP0,299.66,0.23,127469.10,1251.14,83860.19,85111.33
+myargo_bianchi,User4,14.95,30.00,2.40,AP0,299.66,0.23,127469.10,1251.14,83860.19,85111.33
+myargo_bianchi,User5,14.95,30.00,0.00,AP0,299.66,0.23,127469.10,1251.14,83860.19,85111.33
+myargo_bianchi,User6,14.95,30.00,0.00,AP0,299.66,0.23,127469.10,1251.14,83860.19,85111.33
+myargo_bianchi,User7,14.95,30.00,0.00,AP0,299.66,0.23,127469.10,1251.14,83860.19,85111.33
+myargo_bianchi,User8,14.95,30.00,0.00,AP0,299.66,0.23,127469.10,1251.14,83860.19,85111.33
+myargo_bianchi,User9,14.95,30.00,0.00,AP0,299.66,0.23,127469.10,1251.14,83860.19,85111.33

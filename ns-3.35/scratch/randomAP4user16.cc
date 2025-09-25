@@ -123,7 +123,7 @@ public:
     }
 
     double CalculateTransmissionRate(double distance) {
-        if (distance < 5.0) return 150.0;
+        if (distance < 5.0) return 1125.0;
         else if (distance < 10.0) return 130.0;
         else if (distance < 15.0) return 100.0;
         else if (distance < 20.0) return 65.0;
@@ -187,14 +187,14 @@ static uint32_t g_nNewUsers = 0;
 static uint32_t g_nExistingUsers = 0;
 static double g_simTime = 0.0;
 static double g_movementRadius = 0.0;
-static double g_environmentSize = 50.0;
+static double g_environmentSize = 125.0;
 static LightweightAPSelection* g_algorithm = nullptr;
 static std::vector<APInfo> g_apInfoList;
 static std::vector<UserInfo> g_userInfoList;
 static std::vector<Ptr<LightweightMobilityModel>> g_userMobilityModels;
 static std::string g_sessionDir = "";
 static std::mt19937 g_randomEngine;
-static std::uniform_real_distribution<double> g_positionDistribution(0.0, 50.0);
+static std::uniform_real_distribution<double> g_positionDistribution(0.0, 125.0);
 
 // 出力関数
 void PrintMessage(const std::string& message) {
@@ -270,7 +270,7 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     std::string csvDir = "results_csv";
     CreateDirectory(csvDir);
     
-    std::string csvFile = csvDir + "/random_AP" + std::to_string(g_nAPs) + "User" + std::to_string(g_nUsers) + "_09241538.csv";
+    std::string csvFile = csvDir + "/random_AP" + std::to_string(g_nAPs) + "User" + std::to_string(g_nUsers) + "_09251632.csv";
     
     bool fileExists = false;
     std::ifstream checkFile(csvFile);
@@ -526,7 +526,7 @@ int main(int argc, char *argv[]) {
     uint32_t nUsers = nNewUsers + nExistingUsers;
     double simTime = 10.0; // 短縮
     double movementRadius = 15.0;
-    double environmentSize = 50.0;
+    double environmentSize = 125.0;
 
     // コマンドライン引数の処理
     CommandLine cmd;
