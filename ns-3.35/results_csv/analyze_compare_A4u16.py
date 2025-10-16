@@ -6,8 +6,8 @@ from datetime import datetime
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # CSVファイルのパス
-file1 = "random_AP4user100_09251542.csv"
-file2 = "myargo_AP4user16_09251413.csv"
+file1 = "random_AP4user100_09251632.csv"
+file2 = "myargo_AP4user100_09241413.csv"
 
 # データ読み込み
 df1 = pd.read_csv(file1)

@@ -24,49 +24,49 @@ using namespace ns3;
 NS_LOG_COMPONENT_DEFINE("WiFiAPSelection");
 
 struct APInfo {
-    uint32_t apId;
-    Vector position;
-    uint32_t connectedUsers;
-    double channelUtilization;
-    std::vector<double> userRates;
-    uint32_t channel;
-    double totalThroughput; 
+    uint32_t apId; // APの識別子
+    Vector position; // APの位置
+    uint32_t connectedUsers;  // 接続中のユーザー数
+    double channelUtilization; // チャネル使用率
+    std::vector<double> userRates; // 接続中ユーザーの伝送レート
+    uint32_t channel; // 使用チャネル
+    double totalThroughput; // 合計スループット
 };
 
 struct UserInfo {
-    uint32_t userId;
-    Vector position;
-    Vector initialPosition; 
-    uint32_t connectedAP;
-    double throughput;
-    double throughputThreshold;
-    bool hasReachedThreshold;
-    bool isNewUser;
-    double movementDistance;
-    Vector targetPosition;
+    uint32_t userId; // ユーザーの識別子
+    Vector position; // ユーザーの位置
+    Vector initialPosition; // ユーザーの初期位置
+    uint32_t connectedAP; // 接続中のAP
+    double throughput; // ユーザーのスループット
+    double throughputThreshold; // スループットの閾値
+    bool hasReachedThreshold; // 閾値に到達したか
+    bool isNewUser; // 新規ユーザーか
+    double movementDistance; // 移動距離
+    Vector targetPosition; // 目標位置
 };
 
 struct APSelectionResult {
-    uint32_t userId;
-    Vector userPosition;
-    uint32_t selectedAP;
-    double expectedThroughput;
-    double distance;
-    double score;
-    std::vector<std::pair<uint32_t, double>> allScores;
+    uint32_t userId; // ユーザーの識別子
+    Vector userPosition; // ユーザーの位置
+    uint32_t selectedAP; // 選択されたAP
+    double expectedThroughput; // 期待されるスループット
+    double distance; // APとの距離
+    double score; // スコア
+    std::vector<std::pair<uint32_t, double>> allScores; // 全APのスコア
 };
 
 // 改善されたカスタム移動モデル - より頻繁なチェック機能付き
 class APDirectedMobilityModel : public MobilityModel {
 private:
-    Vector m_currentPosition;
-    Vector m_targetPosition;
-    double m_speed;
-    EventId m_moveEvent;
-    Time m_moveInterval;
-    bool m_isMoving;
-    bool m_targetReached;
-    double m_tolerance;
+    Vector m_currentPosition; // 現在位置
+    Vector m_targetPosition; // 目標位置
+    double m_speed; // 移動速度 (m/s)
+    EventId m_moveEvent; // 移動イベントID
+    Time m_moveInterval; // 移動更新間隔
+    bool m_isMoving; // 移動中フラグ
+    bool m_targetReached; // 目標到達フラグ
+    double m_tolerance; // 目標到達許容誤差 (m)(目標位置にどの程度近づけば「到達」と見なすか)
     std::function<bool()> m_shouldStopCallback; // 停止条件チェック用コールバック
     
 public:
@@ -89,15 +89,21 @@ public:
                          MakeDoubleChecker<double>());
         return tid;
     }
-    
+    //------------------------
     APDirectedMobilityModel() : m_speed(3.0), m_moveInterval(Seconds(0.1)), 
                                 m_isMoving(false), m_targetReached(false), m_tolerance(0.5) {}
-    
+                                // 速度：5 m/s（GetTypeIdで指定された1.0より速い）
+                                // 1秒ごとに移動
+                                // 最初は動いていない（m_isMoving = false）
+                                // 目標未到達（m_targetReached = false）
+                                // 許容誤差1.0m
+    //-----------------------
     // 停止条件チェック用コールバックを設定
     void SetShouldStopCallback(std::function<bool()> callback) {
-        m_shouldStopCallback = callback;
+        m_shouldStopCallback = callback;//外部ロジックで停止を判定し、このコールバックで伝える
     }
-    
+    //------------------------
+    // 目標位置を設定し、移動を開始
     void SetTargetPosition(const Vector& target) {
         m_targetPosition = target;
         m_targetReached = false;
