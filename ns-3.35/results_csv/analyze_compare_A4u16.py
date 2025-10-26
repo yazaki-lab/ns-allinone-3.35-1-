@@ -7,7 +7,7 @@ timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # CSVファイルのパス
 file1 = "random_AP4user100_09251632.csv"
-file2 = "myargo_AP4user100_09241413.csv"
+file2 = "myargo_AP4user100_classroom.csv"
 
 # データ読み込み
 df1 = pd.read_csv(file1)
