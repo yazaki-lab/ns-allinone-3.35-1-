@@ -389,16 +389,40 @@ static std::vector<APInfo> g_apInfoList;
 static std::vector<UserInfo> g_userInfoList;
 static std::vector<Ptr<APDirectedMobilityModel>> g_userMobilityModels;
 static std::string g_sessionDir = "";
+static std::ostringstream g_outputBuffer;  // 新規追加：出力バッファ
+static size_t g_bufferFlushSize = 8192;    // 新規追加：8KB毎にフラッシュ
 
 // ランダム生成器
 static std::mt19937 g_randomEngine;
 static std::uniform_real_distribution<double> g_positionDistribution(0.0, 50.0);
+// void PrintMessage(const std::string& message) {
+//     std::cout << message;
+//     if (g_outputFile) {
+//         *g_outputFile << message;
+//         g_outputFile->flush();
+//     }
+// }
 
 void PrintMessage(const std::string& message) {
     std::cout << message;
     if (g_outputFile) {
-        *g_outputFile << message;
+        g_outputBuffer << message;  // バッファに蓄積
+        // バッファが一定サイズを超えたらフラッシュ
+        if (g_outputBuffer.str().size() > g_bufferFlushSize) {
+            *g_outputFile << g_outputBuffer.str();
+            g_outputFile->flush();
+            g_outputBuffer.str("");      // バッファをクリア
+            g_outputBuffer.clear();
+        }
+    }
+}
+// シミュレーション終了時に残りをフラッシュ
+void FlushOutput() {
+    if (g_outputFile && !g_outputBuffer.str().empty()) {
+        *g_outputFile << g_outputBuffer.str();
         g_outputFile->flush();
+        g_outputBuffer.str("");
+        g_outputBuffer.clear();
     }
 }
 
@@ -679,9 +703,9 @@ void UpdateUserMovement() {
         }
     }
 
-    // より頻繁なチェック（0.2秒間隔）で確実に停止
-    if (anyMoving && currentTime < g_simTime - 0.2) {
-        Simulator::Schedule(Seconds(0.2), &UpdateUserMovement);
+    // より頻繁なチェック（0.5秒間隔）で確実に停止
+    if (anyMoving && currentTime < g_simTime - 0.5) {
+        Simulator::Schedule(Seconds(0.5), &UpdateUserMovement);
     } else {
         OUTPUT("全ての新規ユーザの移動が完了しました。\n");
     }
@@ -941,7 +965,7 @@ int main(int argc, char *argv[]) {
         customMobility->SetPosition(initialPos);
         customMobility->SetAttribute("Speed", DoubleValue(3.0));
         customMobility->SetAttribute("Tolerance", DoubleValue(0.5));
-        customMobility->SetAttribute("MoveInterval", TimeValue(Seconds(0.05))); // さらに細かい間隔に
+        customMobility->SetAttribute("MoveInterval", TimeValue(Seconds(0.1))); // さらに細かい間隔に
         staNodes.Get(i)->AggregateObject(customMobility);
         g_userMobilityModels[i] = customMobility;
     }
@@ -1072,6 +1096,7 @@ int main(int argc, char *argv[]) {
     Simulator::Run();
     PrintFinalResults();
     
+    FlushOutput();       // 新規追加：バッファの残りを書き込み
     outputFile.close();
     Simulator::Destroy();
     return 0;
