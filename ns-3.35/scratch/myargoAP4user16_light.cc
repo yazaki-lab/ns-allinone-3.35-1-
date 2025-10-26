@@ -1,3 +1,4 @@
+//軽量化した簡易版
 #include <iostream>
 #include <map>
 #include <vector>

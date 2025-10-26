@@ -6,7 +6,7 @@ from datetime import datetime
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # CSVファイルのパス
-file1 = "random_AP4user100_09251632.csv"
+file1 = "random_AP4user100_09251413.csv"
 file2 = "myargo_AP4user100_classroom.csv"
 
 # データ読み込み
