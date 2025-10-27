@@ -703,9 +703,9 @@ void UpdateUserMovement() {
         }
     }
 
-    // より頻繁なチェック（0.5秒間隔）で確実に停止
-    if (anyMoving && currentTime < g_simTime - 0.5) {
-        Simulator::Schedule(Seconds(0.5), &UpdateUserMovement);
+    // より頻繁なチェック（0.2秒間隔）で確実に停止
+    if (anyMoving && currentTime < g_simTime - 0.2) {
+        Simulator::Schedule(Seconds(0.2), &UpdateUserMovement);
     } else {
         OUTPUT("全ての新規ユーザの移動が完了しました。\n");
     }
