@@ -87,7 +87,7 @@ public:
         m_targetPosition = targetPos;
         m_hasStartedMovement = true;
         
-        // 即座に目標位置に移動（連続的な移動の代わりに）
+        // 即座に目標位置に移動(連続的な移動の代わりに)
         SetPosition(m_targetPosition);
         m_targetReached = true;
     }
@@ -106,7 +106,7 @@ private:
     }
 };
 
-// 軽量化されたAP選択アルゴリズム   
+// 軽量化されたAP選択アルゴリズム    
 class LightweightAPSelection {
 private:
     std::vector<APInfo> m_apList;
@@ -125,7 +125,7 @@ public:
 
     double CalculateTransmissionRate(const Vector& userPos, const Vector& apPos) {
         double distance = CalculateDistance(userPos, apPos);
-        if (distance < 5.0) return 150.0;  // myargoと統一
+        if (distance < 5.0) return 150.0;
         else if (distance < 10.0) return 130.0;
         else if (distance < 15.0) return 100.0;
         else if (distance < 20.0) return 65.0;
@@ -162,7 +162,7 @@ public:
             double transmissionRate = CalculateTransmissionRate(userPos, ap.position);
             double throughput = CalculateThroughput(ap, transmissionRate);
             
-            // シンプルなスコア計算（スループット重視）
+            // シンプルなスコア計算(スループット重視)
             double score = throughput / (1.0 + distance * 0.1);
             
             if (score > bestScore) {
@@ -207,7 +207,7 @@ static std::vector<UserInfo> g_userInfoList;
 static std::vector<Ptr<LightweightMobilityModel>> g_userMobilityModels;
 static std::string g_sessionDir = "";
 static std::mt19937 g_randomEngine;
-static std::uniform_real_distribution<double> g_positionDistribution(0.0, 50.0);
+static std::uniform_real_distribution<double> g_positionDistribution(0.0, 125.0);
 
 // 出力関数
 void PrintMessage(const std::string& message) {
@@ -257,7 +257,7 @@ std::pair<double, double> CalculatePositionVariance() {
     std::vector<Vector> positions;
     for (uint32_t i = 0; i < g_nUsers; ++i) {
         Vector pos;
-        if (g_userInfoList[i].isNewUser && g_userMobilityModels[i]) {
+        if (g_userMobilityModels[i]) {
             pos = g_userMobilityModels[i]->GetPosition();
         } else {
             pos = g_userInfoList[i].position;
@@ -289,7 +289,7 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     std::string csvDir = "results_csv";
     CreateDirectory(csvDir);
     
-    std::string csvFile = csvDir + "/random_AP4user16_010271513.csv";
+    std::string csvFile = csvDir + "/random_AP4user100_existing_random.csv";
     
     bool fileExists = false;
     std::ifstream checkFile(csvFile);
@@ -333,7 +333,7 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     OUTPUT("CSVファイルに結果を出力しました: " << csvFile << "\n");
 }
 
-// システム全体スループット計算（調和平均）
+// システム全体スループット計算(調和平均)
 double CalculateSystemThroughput() {
     if (g_apInfoList.empty()) return 0.0;
     
@@ -376,7 +376,7 @@ double CalculateCurrentThroughput(uint32_t userId, uint32_t apId) {
     if (userId >= g_nUsers || apId >= g_nAPs) return 0.0;
     
     Vector userPos;
-    if (g_userInfoList[userId].isNewUser && g_userMobilityModels[userId]) {
+    if (g_userMobilityModels[userId]) {
         userPos = g_userMobilityModels[userId]->GetPosition();
     } else {
         userPos = g_userInfoList[userId].position;
@@ -408,7 +408,7 @@ void UpdateUserMovement() {
         
         // ランダム移動をまだ開始していない場合は開始
         if (!g_userMobilityModels[i]->HasStartedMovement()) {
-            g_userMobilityModels[i]->SetRandomTarget(g_movementRadius, 50.0);
+            g_userMobilityModels[i]->SetRandomTarget(g_movementRadius, 125.0);
             
             Vector userPos = g_userMobilityModels[i]->GetPosition();
             g_userInfoList[i].position = userPos;
@@ -442,7 +442,8 @@ void PrintInitialState() {
     OUTPUT("シミュレーション時間: " << g_simTime << "秒\n");
     OUTPUT("移動許容距離: " << g_movementRadius << "m\n");
     OUTPUT("要求スループット: " << g_requiredThroughput << "Mbps\n");
-    OUTPUT("環境サイズ: 50m×50m\n");
+    OUTPUT("環境サイズ: 125m×125m\n");
+    OUTPUT("既存ユーザ配置: ランダム\n");
     
     for (uint32_t i = 0; i < g_nNewUsers; ++i) {
         Vector pos = g_userInfoList[i].initialPosition;
@@ -457,7 +458,7 @@ void PrintInitialState() {
     }
     
     double initialSystemThroughput = CalculateSystemThroughput();
-    OUTPUT("実験前システム全体スループット（調和平均）: " 
+    OUTPUT("実験前システム全体スループット(調和平均): " 
            << std::fixed << std::setprecision(2) << initialSystemThroughput << " Mbps\n");
     
     auto initialVariance = CalculatePositionVariance();
@@ -477,7 +478,8 @@ void PrintFinalResults() {
     OUTPUT("結果ディレクトリ: " << g_sessionDir << "\n");
     OUTPUT("移動許容距離: " << g_movementRadius << "m\n");
     OUTPUT("要求スループット: " << g_requiredThroughput << "Mbps\n");
-    OUTPUT("環境サイズ: 50m×50m\n");
+    OUTPUT("環境サイズ: 125m×125m\n");
+    OUTPUT("既存ユーザ配置: ランダム\n");
     
     for (uint32_t i = 0; i < g_nUsers; ++i) {
         if (g_userInfoList[i].isNewUser) {
@@ -551,7 +553,7 @@ void PrintFinalResults() {
     double improvementPercent = (initialSystemThroughput > 0.0) ? 
         (improvement / initialSystemThroughput) * 100.0 : 0.0;
     
-    OUTPUT("システム全体スループット（調和平均）: " 
+    OUTPUT("システム全体スループット(調和平均): " 
            << std::fixed << std::setprecision(2) << finalSystemThroughput << " Mbps\n");
     OUTPUT("初期システムスループット: " << std::setprecision(2) << initialSystemThroughput << " Mbps\n");
     OUTPUT("スループット改善量: " << std::setprecision(2) << improvement << " Mbps\n");
@@ -561,14 +563,14 @@ void PrintFinalResults() {
 }
 
 int main(int argc, char *argv[]) {
-    // パラメータ設定（myargoと統一）
+    // パラメータ設定
     uint32_t nAPs = 4;
     uint32_t nNewUsers = 10;
     uint32_t nExistingUsers = 90;
     uint32_t nUsers = nNewUsers + nExistingUsers;
-    double simTime = 30.0;  // myargoと統一
-    double movementRadius = 14.95;  // myargoと統一
-    double requiredThroughput = 30.0;  // myargoと統一
+    double simTime = 30.0;
+    double movementRadius = 14.95;
+    double requiredThroughput = 30.0;
 
     // コマンドライン引数の処理
     CommandLine cmd;
@@ -592,7 +594,7 @@ int main(int argc, char *argv[]) {
     // 出力ディレクトリ作成
     std::string outputDir = "results";
     CreateDirectory(outputDir);
-    g_sessionDir = outputDir + "/AP4User16_random_" + GetTimestamp();
+    g_sessionDir = outputDir + "/AP4User100_random_existing_" + GetTimestamp();
     CreateDirectory(g_sessionDir);
 
     std::ofstream outputFile(g_sessionDir + "/output.txt");
@@ -605,7 +607,7 @@ int main(int argc, char *argv[]) {
     g_apNodes = &apNodes;
     g_staNodes = &staNodes;
 
-    // WiFi設定（myargoと統一）
+    // WiFi設定
     WifiHelper wifi;
     wifi.SetStandard(WIFI_STANDARD_80211ax_2_4GHZ);
     wifi.SetRemoteStationManager("ns3::IdealWifiManager");
@@ -627,7 +629,7 @@ int main(int argc, char *argv[]) {
     // 移動端末設定
     MobilityHelper mobility;
     
-    // AP配置（myargoと統一）
+    // AP配置(125m×125mの環境に合わせて調整)
     Ptr<ListPositionAllocator> apPositionAlloc = CreateObject<ListPositionAllocator>();
     apPositionAlloc->Add(Vector(31.25, 31.25, 0.0));
     apPositionAlloc->Add(Vector(93.75, 31.25, 0.0));
@@ -651,26 +653,19 @@ int main(int argc, char *argv[]) {
         g_userMobilityModels[i] = lightweightMobility;
     }
     
-    // 既存ユーザの設定（myargoと統一）
+    // 既存ユーザの設定(ランダム配置に変更)
     for (uint32_t i = nNewUsers; i < nUsers; ++i) {
         Ptr<ConstantPositionMobilityModel> constantMobility = CreateObject<ConstantPositionMobilityModel>();
-        Vector fixedPos;
         
-        uint32_t userIndex = i - nNewUsers;
-        uint32_t row = userIndex / 4;
-        uint32_t col = userIndex % 4;
+        // ランダムな位置を生成
+        Vector randomPos = GenerateRandomPosition();
         
-        double x = 15.625 + col * 31.25;
-        double y = 20.83 + row * 41.67;
-        
-        fixedPos = Vector(x, y, 0.0);
-        
-        constantMobility->SetPosition(fixedPos);
+        constantMobility->SetPosition(randomPos);
         staNodes.Get(i)->AggregateObject(constantMobility);
         g_userMobilityModels[i] = nullptr;
     }
 
-    // AP情報を初期化（myargoと統一）
+    // AP情報を初期化
     g_apInfoList.resize(nAPs);
     
     for (uint32_t apId = 0; apId < nAPs; ++apId) {
@@ -751,7 +746,7 @@ int main(int argc, char *argv[]) {
     Ipv4InterfaceContainer apInterfaces = address.Assign(apDevices);
     Ipv4InterfaceContainer staInterfaces = address.Assign(staDevices);
 
-    // アプリケーション設定（myargoと統一）
+    // アプリケーション設定
     UdpEchoServerHelper echoServer(9);
     ApplicationContainer serverApps = echoServer.Install(apNodes.Get(0));
     serverApps.Start(Seconds(1.0));
@@ -766,11 +761,11 @@ int main(int argc, char *argv[]) {
     clientApps.Start(Seconds(2.0));
     clientApps.Stop(Seconds(simTime));
 
-    // FlowMonitor設定（myargoと統一）
+    // FlowMonitor設定
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
 
-    // AnimationInterface設定（myargoと統一）
+    // AnimationInterface設定
     AnimationInterface anim(g_sessionDir + "/animation.xml");
     for (uint32_t i = 0; i < nAPs; ++i) {
         anim.UpdateNodeColor(apNodes.Get(i), 0, 255, 0);
