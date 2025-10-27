@@ -466,7 +466,7 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     std::string csvDir = "results_csv";
     CreateDirectory(csvDir);
     
-    std::string csvFile = csvDir + "/myargo_AP4user100_random.csv";
+    std::string csvFile = csvDir + "/myargo_AP4user100_random_10272301.csv";
     
     bool fileExists = false;
     std::ifstream checkFile(csvFile);
@@ -903,12 +903,12 @@ int main(int argc, char *argv[]) {
     staDevices = wifi.Install(phy, mac, staNodes);
 
     MobilityHelper mobility;
-    
+    // AP配置 - 50m×50mの範囲内に均等配置
     Ptr<ListPositionAllocator> apPositionAlloc = CreateObject<ListPositionAllocator>();
-    apPositionAlloc->Add(Vector(31.25, 31.25, 0.0));
-    apPositionAlloc->Add(Vector(93.75, 31.25, 0.0));
-    apPositionAlloc->Add(Vector(31.25, 93.75, 0.0));
-    apPositionAlloc->Add(Vector(93.75, 93.75, 0.0));
+    apPositionAlloc->Add(Vector(12.5, 12.5, 0.0));  // 左下
+    apPositionAlloc->Add(Vector(37.5, 12.5, 0.0));  // 右下
+    apPositionAlloc->Add(Vector(12.5, 37.5, 0.0));  // 左上
+    apPositionAlloc->Add(Vector(37.5, 37.5, 0.0));  // 右上
 
     mobility.SetPositionAllocator(apPositionAlloc);
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -941,6 +941,7 @@ int main(int argc, char *argv[]) {
 
     g_apInfoList.resize(nAPs);
     
+    // AP情報を50m×50mの範囲内の座標に修正
     for (uint32_t apId = 0; apId < nAPs; ++apId) {
         g_apInfoList[apId].apId = apId;
         g_apInfoList[apId].connectedUsers = 0;
@@ -949,19 +950,19 @@ int main(int argc, char *argv[]) {
         
         switch (apId) {
             case 0: 
-                g_apInfoList[apId].position = Vector(31.25, 31.25, 0.0);
+                g_apInfoList[apId].position = Vector(12.5, 12.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.2; 
                 break;
             case 1: 
-                g_apInfoList[apId].position = Vector(93.75, 31.25, 0.0);
+                g_apInfoList[apId].position = Vector(37.5, 12.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.3; 
                 break;
             case 2: 
-                g_apInfoList[apId].position = Vector(31.25, 93.75, 0.0);
+                g_apInfoList[apId].position = Vector(12.5, 37.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.4; 
                 break;
             case 3: 
-                g_apInfoList[apId].position = Vector(93.75, 93.75, 0.0);
+                g_apInfoList[apId].position = Vector(37.5, 37.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.5; 
                 break;
         }

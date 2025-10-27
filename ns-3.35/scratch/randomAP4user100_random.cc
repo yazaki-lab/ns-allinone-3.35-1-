@@ -106,7 +106,7 @@ private:
     }
 };
 
-// 軽量化されたAP選択アルゴリズム    
+// 軽量化されたAP選択アルゴリズム     
 class LightweightAPSelection {
 private:
     std::vector<APInfo> m_apList;
@@ -207,7 +207,7 @@ static std::vector<UserInfo> g_userInfoList;
 static std::vector<Ptr<LightweightMobilityModel>> g_userMobilityModels;
 static std::string g_sessionDir = "";
 static std::mt19937 g_randomEngine;
-static std::uniform_real_distribution<double> g_positionDistribution(0.0, 125.0);
+static std::uniform_real_distribution<double> g_positionDistribution(0.0, 50.0);  // 50m×50mに変更
 
 // 出力関数
 void PrintMessage(const std::string& message) {
@@ -289,7 +289,7 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     std::string csvDir = "results_csv";
     CreateDirectory(csvDir);
     
-    std::string csvFile = csvDir + "/random_AP4user100_existing_random.csv";
+    std::string csvFile = csvDir + "/random_AP4user100_random_10272301.csv";
     
     bool fileExists = false;
     std::ifstream checkFile(csvFile);
@@ -408,7 +408,7 @@ void UpdateUserMovement() {
         
         // ランダム移動をまだ開始していない場合は開始
         if (!g_userMobilityModels[i]->HasStartedMovement()) {
-            g_userMobilityModels[i]->SetRandomTarget(g_movementRadius, 125.0);
+            g_userMobilityModels[i]->SetRandomTarget(g_movementRadius, 50.0);  // 50mに変更
             
             Vector userPos = g_userMobilityModels[i]->GetPosition();
             g_userInfoList[i].position = userPos;
@@ -442,7 +442,7 @@ void PrintInitialState() {
     OUTPUT("シミュレーション時間: " << g_simTime << "秒\n");
     OUTPUT("移動許容距離: " << g_movementRadius << "m\n");
     OUTPUT("要求スループット: " << g_requiredThroughput << "Mbps\n");
-    OUTPUT("環境サイズ: 125m×125m\n");
+    OUTPUT("環境サイズ: 50m×50m\n");
     OUTPUT("既存ユーザ配置: ランダム\n");
     
     for (uint32_t i = 0; i < g_nNewUsers; ++i) {
@@ -478,7 +478,7 @@ void PrintFinalResults() {
     OUTPUT("結果ディレクトリ: " << g_sessionDir << "\n");
     OUTPUT("移動許容距離: " << g_movementRadius << "m\n");
     OUTPUT("要求スループット: " << g_requiredThroughput << "Mbps\n");
-    OUTPUT("環境サイズ: 125m×125m\n");
+    OUTPUT("環境サイズ: 50m×50m\n");
     OUTPUT("既存ユーザ配置: ランダム\n");
     
     for (uint32_t i = 0; i < g_nUsers; ++i) {
@@ -623,18 +623,18 @@ int main(int argc, char *argv[]) {
     mac.SetType("ns3::ApWifiMac", "Ssid", SsidValue(ssid));
     apDevices = wifi.Install(phy, mac, apNodes);
     
-    mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssid));
+    mac.SetType("ns3::StaWifiMac", "Ssid", SsidValue(ssid), "ActiveProbing", BooleanValue(false));
     staDevices = wifi.Install(phy, mac, staNodes);
 
     // 移動端末設定
     MobilityHelper mobility;
     
-    // AP配置(125m×125mの環境に合わせて調整)
+    // AP配置(50m×50mの環境に合わせて調整)
     Ptr<ListPositionAllocator> apPositionAlloc = CreateObject<ListPositionAllocator>();
-    apPositionAlloc->Add(Vector(31.25, 31.25, 0.0));
-    apPositionAlloc->Add(Vector(93.75, 31.25, 0.0));
-    apPositionAlloc->Add(Vector(31.25, 93.75, 0.0));
-    apPositionAlloc->Add(Vector(93.75, 93.75, 0.0));
+    apPositionAlloc->Add(Vector(12.5, 12.5, 0.0));
+    apPositionAlloc->Add(Vector(37.5, 12.5, 0.0));
+    apPositionAlloc->Add(Vector(12.5, 37.5, 0.0));
+    apPositionAlloc->Add(Vector(37.5, 37.5, 0.0));
     
     mobility.SetPositionAllocator(apPositionAlloc);
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -676,19 +676,19 @@ int main(int argc, char *argv[]) {
         
         switch (apId) {
             case 0: 
-                g_apInfoList[apId].position = Vector(31.25, 31.25, 0.0);
+                g_apInfoList[apId].position = Vector(12.5, 12.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.2; 
                 break;
             case 1: 
-                g_apInfoList[apId].position = Vector(93.75, 31.25, 0.0);
+                g_apInfoList[apId].position = Vector(37.5, 12.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.3; 
                 break;
             case 2: 
-                g_apInfoList[apId].position = Vector(31.25, 93.75, 0.0);
+                g_apInfoList[apId].position = Vector(12.5, 37.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.4; 
                 break;
             case 3: 
-                g_apInfoList[apId].position = Vector(93.75, 93.75, 0.0);
+                g_apInfoList[apId].position = Vector(37.5, 37.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.5; 
                 break;
         }
@@ -741,9 +741,27 @@ int main(int argc, char *argv[]) {
     stack.Install(apNodes);
     stack.Install(staNodes);
 
+    // 各APに個別のサブネットを割り当て
     Ipv4AddressHelper address;
-    address.SetBase("10.1.0.0", "255.255.255.0");
-    Ipv4InterfaceContainer apInterfaces = address.Assign(apDevices);
+    
+    // AP0用のサブネット
+    address.SetBase("10.1.1.0", "255.255.255.0");
+    Ipv4InterfaceContainer ap0Interface = address.Assign(apDevices.Get(0));
+    
+    // AP1用のサブネット
+    address.SetBase("10.1.2.0", "255.255.255.0");
+    Ipv4InterfaceContainer ap1Interface = address.Assign(apDevices.Get(1));
+    
+    // AP2用のサブネット
+    address.SetBase("10.1.3.0", "255.255.255.0");
+    Ipv4InterfaceContainer ap2Interface = address.Assign(apDevices.Get(2));
+    
+    // AP3用のサブネット
+    address.SetBase("10.1.4.0", "255.255.255.0");
+    Ipv4InterfaceContainer ap3Interface = address.Assign(apDevices.Get(3));
+    
+    // STAデバイスには異なるサブネットを割り当て
+    address.SetBase("10.2.0.0", "255.255.0.0");
     Ipv4InterfaceContainer staInterfaces = address.Assign(staDevices);
 
     // アプリケーション設定
@@ -752,7 +770,7 @@ int main(int argc, char *argv[]) {
     serverApps.Start(Seconds(1.0));
     serverApps.Stop(Seconds(simTime));
 
-    UdpEchoClientHelper echoClient(apInterfaces.GetAddress(0), 9);
+    UdpEchoClientHelper echoClient(ap0Interface.GetAddress(0), 9);
     echoClient.SetAttribute("MaxPackets", UintegerValue(1000));
     echoClient.SetAttribute("Interval", TimeValue(Seconds(0.1)));
     echoClient.SetAttribute("PacketSize", UintegerValue(1024));
