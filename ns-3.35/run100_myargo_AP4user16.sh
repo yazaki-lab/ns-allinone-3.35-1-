@@ -3,6 +3,6 @@
 for i in {1..100}
 do
     echo "Run $i"
-    ./waf --run "scratch/myargoAP4user16"
+    ./waf --run "scratch/myargoAP4user100_random"
 done
 echo "All runs completed."

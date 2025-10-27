@@ -1014,19 +1014,30 @@ int main(int argc, char *argv[]) {
     Ipv4InterfaceContainer apInterfaces = address.Assign(apDevices);
     Ipv4InterfaceContainer staInterfaces = address.Assign(staDevices);
 
-    UdpEchoServerHelper echoServer(9);
-    ApplicationContainer serverApps = echoServer.Install(apNodes.Get(0));
-    serverApps.Start(Seconds(1.0));
-    serverApps.Stop(Seconds(simTime));
+    // 各APにサーバーを設置
+    ApplicationContainer serverApps;
+    for (uint32_t i = 0; i < nAPs; ++i) {
+        UdpEchoServerHelper echoServer(9000 + i);
+        ApplicationContainer app = echoServer.Install(apNodes.Get(i));
+        app.Start(Seconds(1.0));
+        app.Stop(Seconds(simTime));
+        serverApps.Add(app);
+    }
 
-    UdpEchoClientHelper echoClient(apInterfaces.GetAddress(0), 9);
-    echoClient.SetAttribute("MaxPackets", UintegerValue(1000));
-    echoClient.SetAttribute("Interval", TimeValue(Seconds(0.1)));
-    echoClient.SetAttribute("PacketSize", UintegerValue(1024));
-
-    ApplicationContainer clientApps = echoClient.Install(staNodes);
-    clientApps.Start(Seconds(2.0));
-    clientApps.Stop(Seconds(simTime));
+    // 各STAが最寄りのAPに接続するようにクライアントを設定
+    ApplicationContainer clientApps;
+    for (uint32_t i = 0; i < nUsers; ++i) {
+        uint32_t targetAP = g_userInfoList[i].connectedAP;
+        UdpEchoClientHelper echoClient(apInterfaces.GetAddress(targetAP), 9000 + targetAP);
+        echoClient.SetAttribute("MaxPackets", UintegerValue(100));
+        echoClient.SetAttribute("Interval", TimeValue(Seconds(1.0)));
+        echoClient.SetAttribute("PacketSize", UintegerValue(512));
+        
+        ApplicationContainer app = echoClient.Install(staNodes.Get(i));
+        app.Start(Seconds(2.0 + i * 0.01));  // 各クライアントを少しずつずらして起動
+        app.Stop(Seconds(simTime));
+        clientApps.Add(app);
+    }
 
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
