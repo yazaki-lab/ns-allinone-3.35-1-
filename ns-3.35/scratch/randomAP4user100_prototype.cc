@@ -106,7 +106,7 @@ private:
     }
 };
 
-// 軽量化されたAP選択アルゴリズム   
+// 軽量化されたAP選択アルゴリズム    
 class LightweightAPSelection {
 private:
     std::vector<APInfo> m_apList;
@@ -125,7 +125,7 @@ public:
 
     double CalculateTransmissionRate(const Vector& userPos, const Vector& apPos) {
         double distance = CalculateDistance(userPos, apPos);
-        if (distance < 5.0) return 150.0;  // myargoと統一
+        if (distance < 5.0) return 150.0;
         else if (distance < 10.0) return 130.0;
         else if (distance < 15.0) return 100.0;
         else if (distance < 20.0) return 65.0;
@@ -457,7 +457,7 @@ void PrintInitialState() {
     }
     
     double initialSystemThroughput = CalculateSystemThroughput();
-    OUTPUT("実験前システム全体スループット（調和平均）: " 
+    OUTPUT("実験前システム全体スループット(調和平均): " 
            << std::fixed << std::setprecision(2) << initialSystemThroughput << " Mbps\n");
     
     auto initialVariance = CalculatePositionVariance();
@@ -551,7 +551,7 @@ void PrintFinalResults() {
     double improvementPercent = (initialSystemThroughput > 0.0) ? 
         (improvement / initialSystemThroughput) * 100.0 : 0.0;
     
-    OUTPUT("システム全体スループット（調和平均）: " 
+    OUTPUT("システム全体スループット(調和平均): " 
            << std::fixed << std::setprecision(2) << finalSystemThroughput << " Mbps\n");
     OUTPUT("初期システムスループット: " << std::setprecision(2) << initialSystemThroughput << " Mbps\n");
     OUTPUT("スループット改善量: " << std::setprecision(2) << improvement << " Mbps\n");
@@ -561,14 +561,14 @@ void PrintFinalResults() {
 }
 
 int main(int argc, char *argv[]) {
-    // パラメータ設定（myargoと統一）
+    // パラメータ設定（50m×50m環境用）
     uint32_t nAPs = 4;
     uint32_t nNewUsers = 10;
     uint32_t nExistingUsers = 90;
     uint32_t nUsers = nNewUsers + nExistingUsers;
-    double simTime = 30.0;  // myargoと統一
-    double movementRadius = 14.95;  // myargoと統一
-    double requiredThroughput = 30.0;  // myargoと統一
+    double simTime = 30.0;
+    double movementRadius = 14.95;
+    double requiredThroughput = 30.0;
 
     // コマンドライン引数の処理
     CommandLine cmd;
@@ -605,7 +605,7 @@ int main(int argc, char *argv[]) {
     g_apNodes = &apNodes;
     g_staNodes = &staNodes;
 
-    // WiFi設定（myargoと統一）
+    // WiFi設定
     WifiHelper wifi;
     wifi.SetStandard(WIFI_STANDARD_80211ax_2_4GHZ);
     wifi.SetRemoteStationManager("ns3::IdealWifiManager");
@@ -627,12 +627,12 @@ int main(int argc, char *argv[]) {
     // 移動端末設定
     MobilityHelper mobility;
     
-    // AP配置（myargoと統一）
+    // AP配置（50m×50m環境用に調整）
     Ptr<ListPositionAllocator> apPositionAlloc = CreateObject<ListPositionAllocator>();
-    apPositionAlloc->Add(Vector(31.25, 31.25, 0.0));
-    apPositionAlloc->Add(Vector(93.75, 31.25, 0.0));
-    apPositionAlloc->Add(Vector(31.25, 93.75, 0.0));
-    apPositionAlloc->Add(Vector(93.75, 93.75, 0.0));
+    apPositionAlloc->Add(Vector(12.5, 12.5, 0.0));  // 左下
+    apPositionAlloc->Add(Vector(37.5, 12.5, 0.0));  // 右下
+    apPositionAlloc->Add(Vector(12.5, 37.5, 0.0));  // 左上
+    apPositionAlloc->Add(Vector(37.5, 37.5, 0.0));  // 右上
     
     mobility.SetPositionAllocator(apPositionAlloc);
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
@@ -651,17 +651,18 @@ int main(int argc, char *argv[]) {
         g_userMobilityModels[i] = lightweightMobility;
     }
     
-    // 既存ユーザの設定（myargoと統一）
+    // 既存ユーザの設定（50m×50m環境用グリッド配置）
     for (uint32_t i = nNewUsers; i < nUsers; ++i) {
         Ptr<ConstantPositionMobilityModel> constantMobility = CreateObject<ConstantPositionMobilityModel>();
         Vector fixedPos;
         
         uint32_t userIndex = i - nNewUsers;
-        uint32_t row = userIndex / 4;
-        uint32_t col = userIndex % 4;
+        uint32_t row = userIndex / 10;  // 10列
+        uint32_t col = userIndex % 10;
         
-        double x = 15.625 + col * 31.25;
-        double y = 20.83 + row * 41.67;
+        // 50m×50mの環境に90ユーザを配置（9行×10列）
+        double x = 2.5 + col * 5.0;      // 2.5mから47.5mまで5m間隔
+        double y = 5.0 + row * 5.0;      // 5.0mから45.0mまで5m間隔
         
         fixedPos = Vector(x, y, 0.0);
         
@@ -670,7 +671,7 @@ int main(int argc, char *argv[]) {
         g_userMobilityModels[i] = nullptr;
     }
 
-    // AP情報を初期化（myargoと統一）
+    // AP情報を初期化（50m×50m環境用）
     g_apInfoList.resize(nAPs);
     
     for (uint32_t apId = 0; apId < nAPs; ++apId) {
@@ -681,19 +682,19 @@ int main(int argc, char *argv[]) {
         
         switch (apId) {
             case 0: 
-                g_apInfoList[apId].position = Vector(31.25, 31.25, 0.0);
+                g_apInfoList[apId].position = Vector(12.5, 12.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.2; 
                 break;
             case 1: 
-                g_apInfoList[apId].position = Vector(93.75, 31.25, 0.0);
+                g_apInfoList[apId].position = Vector(37.5, 12.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.3; 
                 break;
             case 2: 
-                g_apInfoList[apId].position = Vector(31.25, 93.75, 0.0);
+                g_apInfoList[apId].position = Vector(12.5, 37.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.4; 
                 break;
             case 3: 
-                g_apInfoList[apId].position = Vector(93.75, 93.75, 0.0);
+                g_apInfoList[apId].position = Vector(37.5, 37.5, 0.0);
                 g_apInfoList[apId].channelUtilization = 0.5; 
                 break;
         }
@@ -751,7 +752,7 @@ int main(int argc, char *argv[]) {
     Ipv4InterfaceContainer apInterfaces = address.Assign(apDevices);
     Ipv4InterfaceContainer staInterfaces = address.Assign(staDevices);
 
-    // アプリケーション設定（myargoと統一）
+    // アプリケーション設定
     UdpEchoServerHelper echoServer(9);
     ApplicationContainer serverApps = echoServer.Install(apNodes.Get(0));
     serverApps.Start(Seconds(1.0));
@@ -766,11 +767,11 @@ int main(int argc, char *argv[]) {
     clientApps.Start(Seconds(2.0));
     clientApps.Stop(Seconds(simTime));
 
-    // FlowMonitor設定（myargoと統一）
+    // FlowMonitor設定
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
 
-    // AnimationInterface設定（myargoと統一）
+    // AnimationInterface設定
     AnimationInterface anim(g_sessionDir + "/animation.xml");
     for (uint32_t i = 0; i < nAPs; ++i) {
         anim.UpdateNodeColor(apNodes.Get(i), 0, 255, 0);
