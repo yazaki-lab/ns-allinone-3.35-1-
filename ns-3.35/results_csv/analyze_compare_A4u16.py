@@ -6,8 +6,8 @@ from datetime import datetime
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # CSVファイルのパス
-file1 = "random_AP4user100_09251413.csv"
-file2 = "myargo_AP4user100_classroom.csv"
+file1 = "myargo_AP4user100_random_10272301.csv"
+file2 = "random_AP4user100_random_10272301.csv"
 
 # データ読み込み
 df1 = pd.read_csv(file1)
@@ -24,7 +24,7 @@ improvement2 = df2["ImprovementRate"]
 
 plt.figure(figsize=(6, 5))
 plt.boxplot([improvement1, improvement2],
-            tick_labels=["Random", "Proposed"],
+            tick_labels=["Proposed","Random"],
             patch_artist=True,
             boxprops=dict(facecolor="lightblue"),
             medianprops=dict(color="red"),
@@ -50,7 +50,7 @@ distance2 = df2["MovementDistance"]
 
 plt.figure(figsize=(6, 5))
 plt.boxplot([distance1, distance2],
-            tick_labels=["Random", "Proposed"],
+            tick_labels=["Proposed", "Random"],
             patch_artist=True,
             boxprops=dict(facecolor="lightblue"),
             medianprops=dict(color="red"),
@@ -72,8 +72,8 @@ plt.close()
 # 3. ImprovementRate のヒストグラム
 # ======================
 plt.figure(figsize=(6, 5))
-plt.hist(improvement1, bins=30, alpha=0.5, label="Random", color="blue")
-plt.hist(improvement2, bins=30, alpha=0.5, label="Proposed", color="orange")
+plt.hist(improvement1, bins=30, alpha=0.5, label="Proposed", color="orange")
+plt.hist(improvement2, bins=30, alpha=0.5, label="Random", color="blue")
 plt.xlabel("Improvement Rate (%)")
 plt.ylabel("Frequency")
 plt.grid(True, linestyle="--", alpha=0.5)
@@ -85,8 +85,8 @@ plt.close()
 # 4. MovementDistance のヒストグラム
 # ======================
 plt.figure(figsize=(6, 5))
-plt.hist(distance1, bins=30, alpha=0.5, label="Random", color="blue")
-plt.hist(distance2, bins=30, alpha=0.5, label="Proposed", color="orange")
+plt.hist(distance1, bins=30, alpha=0.5, label="Proposed", color="orange")
+plt.hist(distance2, bins=30, alpha=0.5, label="Random", color="blue")
 plt.xlabel("Travel Distance")
 plt.ylabel("Frequency")
 plt.grid(True, linestyle="--", alpha=0.5)
