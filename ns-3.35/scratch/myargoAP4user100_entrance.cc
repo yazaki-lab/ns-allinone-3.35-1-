@@ -875,7 +875,7 @@ void PrintInitialState() {
                << g_doorPositions[i].y << ")\n");
     }
     OUTPUT("新規ユーザ出現方式: 1秒ごとに1人ずつ、合計" << g_nNewUsers << "人\n");
-    OUTPUT("新規ユーザ出現開始時刻: 3.0秒後\n\n");
+    OUTPUT("新規ユーザ出現開始時刻: 1.0秒後\n\n");
     
     OUTPUT("既存ユーザ配置:\n");
     for (uint32_t i = g_nNewUsers; i < g_userInfoList.size(); ++i) {
@@ -1165,7 +1165,7 @@ int main(int argc, char *argv[]) {
     }
 
     Simulator::Stop(Seconds(simTime));
-    Simulator::Schedule(Seconds(3.0), &StartUserMovement);
+    Simulator::Schedule(Seconds(1.0), &StartUserMovement);
     
     Simulator::Run();
     PrintFinalResults();
