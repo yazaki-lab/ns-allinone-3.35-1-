@@ -506,7 +506,7 @@ void OutputResultsToCSV(double finalSystemThroughput, double initialSystemThroug
     std::string csvDir = "results_csv";
     CreateDirectory(csvDir);
     
-    std::string csvFile = csvDir + "/myargo_AP4user16_door.csv";
+    std::string csvFile = csvDir + "/myargo_AP4user16_entrance_10280930.csv";
     
     bool fileExists = false;
     std::ifstream checkFile(csvFile);

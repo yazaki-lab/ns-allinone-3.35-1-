@@ -1,8 +1,8 @@
 #!/bin/bash
 
 FILES=(
-  "scratch/myargoAP4user100_random.cc"
-  "scratch/randomAP4user100_random.cc"
+  "scratch/myargoAP4user100_entrance.cc"
+  "scratch/randomAP4user100_entrance.cc"
   
 )
 
