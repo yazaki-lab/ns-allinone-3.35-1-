@@ -221,6 +221,13 @@ int main(int argc, char *argv[]) {
         
         anim = new AnimationInterface(animFile);
         
+        // パケットのトレースを有効化
+        anim->EnablePacketMetadata(true);
+        anim->EnableIpv4RouteTracking(resultsDir + "/routingtable.xml", 
+                                      Seconds(0), Seconds(simulationTime), Seconds(0.5));
+        anim->EnableWifiMacCounters(Seconds(0), Seconds(simulationTime));
+        anim->EnableWifiPhyCounters(Seconds(0), Seconds(simulationTime));
+        
         // ノードの説明を追加
         anim->UpdateNodeDescription(wifiApNode.Get(0), "AP");
         for (uint32_t i = 0; i < nStations; ++i) {
