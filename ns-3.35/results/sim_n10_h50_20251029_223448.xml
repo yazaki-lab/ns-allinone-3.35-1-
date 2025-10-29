@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<simulation>
+  <parameters>
+    <totalStations>10</totalStations>
+    <heavyUsers>5</heavyUsers>
+    <lightUsers>5</lightUsers>
+    <heavyUserPercentage>50</heavyUserPercentage>
+    <heavyUserRate unit="Mbps">100</heavyUserRate>
+    <lightUserRate unit="Mbps">50</lightUserRate>
+    <packetSize unit="bytes">1024</packetSize>
+    <simulationTime unit="seconds">10</simulationTime>
+    <timestamp>20251029_223448</timestamp>
+  </parameters>
+
+  <channelUtilization>
+    <utilization unit="percent">83.9285</utilization>
+    <totalBusyTime unit="seconds">93.2448</totalBusyTime>
+    <totalTime unit="seconds">111.1</totalTime>
+  </channelUtilization>
+
+  <performanceMetrics>
+    <averageThroughput unit="Mbps">21.6306</averageThroughput>
+    <totalThroughput unit="Mbps">216.306</totalThroughput>
+    <averageDelay unit="ms">2483.3</averageDelay>
+    <packetLossRate unit="percent">71.927</packetLossRate>
+    <totalTxPackets>823980</totalTxPackets>
+    <totalRxPackets>231316</totalRxPackets>
+  </performanceMetrics>
+
+  <flows>
+    <flow id="0" type="Heavy">
+      <sourceIP>10.1.1.2</sourceIP>
+      <destinationIP>10.1.1.1</destinationIP>
+      <sourcePort>49153</sourcePort>
+      <destinationPort>9</destinationPort>
+      <throughput unit="Mbps">25.0479</throughput>
+      <txPackets>109864</txPackets>
+      <rxPackets>26786</rxPackets>
+      <txBytes>115576928</txBytes>
+      <rxBytes>28178872</rxBytes>
+      <lostPackets>70551</lostPackets>
+      <averageDelay unit="ms">2445.46</averageDelay>
+    </flow>
+    <flow id="1" type="Heavy">
+      <sourceIP>10.1.1.3</sourceIP>
+      <destinationIP>10.1.1.1</destinationIP>
+      <sourcePort>49153</sourcePort>
+      <destinationPort>10</destinationPort>
+      <throughput unit="Mbps">25.2686</throughput>
+      <txPackets>109864</txPackets>
+      <rxPackets>27022</rxPackets>
+      <txBytes>115576928</txBytes>
+      <rxBytes>28427144</rxBytes>
+      <lostPackets>71865</lostPackets>
+      <averageDelay unit="ms">2451.12</averageDelay>
+    </flow>
+    <flow id="2" type="Heavy">
+      <sourceIP>10.1.1.4</sourceIP>
+      <destinationIP>10.1.1.1</destinationIP>
+      <sourcePort>49153</sourcePort>
+      <destinationPort>11</destinationPort>
+      <throughput unit="Mbps">24.772</throughput>
+      <txPackets>109864</txPackets>
+      <rxPackets>26491</rxPackets>
+      <txBytes>115576928</txBytes>
+      <rxBytes>27868532</rxBytes>
+      <lostPackets>71783</lostPackets>
+      <averageDelay unit="ms">2427.66</averageDelay>
+    </flow>
+    <flow id="3" type="Heavy">
+      <sourceIP>10.1.1.5</sourceIP>
+      <destinationIP>10.1.1.1</destinationIP>
+      <sourcePort>49153</sourcePort>
+      <destinationPort>12</destinationPort>
+      <throughput unit="Mbps">17.3276</throughput>
+      <txPackets>109864</txPackets>
+      <rxPackets>18530</rxPackets>
+      <txBytes>115576928</txBytes>
+      <rxBytes>19493560</rxBytes>
+      <lostPackets>78563</lostPackets>
+      <averageDelay unit="ms">3068.69</averageDelay>
+    </flow>
+    <flow id="4" type="Heavy">
+      <sourceIP>10.1.1.6</sourceIP>
+      <destinationIP>10.1.1.1</destinationIP>
+      <sourcePort>49153</sourcePort>
+      <destinationPort>13</destinationPort>
+      <throughput unit="Mbps">21.2691</throughput>
+      <txPackets>109864</txPackets>
+      <rxPackets>22745</rxPackets>
+      <txBytes>115576928</txBytes>
+      <rxBytes>23927740</rxBytes>
+      <lostPackets>75096</lostPackets>
+      <averageDelay unit="ms">2630.48</averageDelay>
+    </flow>
+    <flow id="5" type="Light">
+      <sourceIP>10.1.1.7</sourceIP>
+      <destinationIP>10.1.1.1</destinationIP>
+      <sourcePort>49153</sourcePort>
+      <destinationPort>14</destinationPort>
+      <throughput unit="Mbps">16.6618</throughput>
+      <txPackets>54932</txPackets>
+      <rxPackets>17818</rxPackets>
+      <txBytes>57788464</txBytes>
+      <rxBytes>18744536</rxBytes>
+      <lostPackets>24661</lostPackets>
+      <averageDelay unit="ms">2549.35</averageDelay>
+    </flow>
+    <flow id="6" type="Light">
+      <sourceIP>10.1.1.8</sourceIP>
+      <destinationIP>10.1.1.1</destinationIP>
+      <sourcePort>49153</sourcePort>
+      <destinationPort>15</destinationPort>
+      <throughput unit="Mbps">23.2487</throughput>
+      <txPackets>54932</txPackets>
+      <rxPackets>24862</rxPackets>
+      <txBytes>57788464</txBytes>
+      <rxBytes>26154824</rxBytes>
+      <lostPackets>19108</lostPackets>
+      <averageDelay unit="ms">2092</averageDelay>
+    </flow>
+    <flow id="7" type="Light">
+      <sourceIP>10.1.1.9</sourceIP>
+      <destinationIP>10.1.1.1</destinationIP>
+      <sourcePort>49153</sourcePort>
+      <destinationPort>16</destinationPort>
+      <throughput unit="Mbps">21.8807</throughput>
+      <txPackets>54932</txPackets>
+      <rxPackets>23399</rxPackets>
+      <txBytes>57788464</txBytes>
+      <rxBytes>24615748</rxBytes>
+      <lostPackets>19789</lostPackets>
+      <averageDelay unit="ms">2238.72</averageDelay>
+    </flow>
+    <flow id="8" type="Light">
+      <sourceIP>10.1.1.10</sourceIP>
+      <destinationIP>10.1.1.1</destinationIP>
+      <sourcePort>49153</sourcePort>
+      <destinationPort>17</destinationPort>
+      <throughput unit="Mbps">19.9786</throughput>
+      <txPackets>54932</txPackets>
+      <rxPackets>21365</rxPackets>
+      <txBytes>57788464</txBytes>
+      <rxBytes>22475980</rxBytes>
+      <lostPackets>21071</lostPackets>
+      <averageDelay unit="ms">2550.05</averageDelay>
+    </flow>
+    <flow id="9" type="Light">
+      <sourceIP>10.1.1.11</sourceIP>
+      <destinationIP>10.1.1.1</destinationIP>
+      <sourcePort>49153</sourcePort>
+      <destinationPort>18</destinationPort>
+      <throughput unit="Mbps">20.8511</throughput>
+      <txPackets>54932</txPackets>
+      <rxPackets>22298</rxPackets>
+      <txBytes>57788464</txBytes>
+      <rxBytes>23457496</rxBytes>
+      <lostPackets>20377</lostPackets>
+      <averageDelay unit="ms">2573.44</averageDelay>
+    </flow>
+  </flows>
+</simulation>

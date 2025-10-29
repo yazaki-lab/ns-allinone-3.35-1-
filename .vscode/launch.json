@@ -6,8 +6,8 @@
       "type": "lldb",
       "request": "launch",
       "args": [],
-      "cwd": "/Users/kamikawamasahiro/Downloads/ns-allinone-3.35/ns-3.35/scratch",
-      "program": "/Users/kamikawamasahiro/Downloads/ns-allinone-3.35/ns-3.35/scratch/build/Debug/outDebug"
+      "cwd": "/Users/kamikawamasahiro/Desktop/ns-allinone-3.35(1)/ns-3.35/archived_simulationcodes",
+      "program": "/Users/kamikawamasahiro/Desktop/ns-allinone-3.35(1)/ns-3.35/archived_simulationcodes/build/Debug/outDebug"
     }
   ]
 }

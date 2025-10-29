@@ -11,6 +11,7 @@
 #include "ns3/wifi-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/flow-monitor-module.h"
+#include "ns3/netanim-module.h"
 
 #include <fstream>
 #include <vector>
@@ -63,6 +64,7 @@ int main(int argc, char *argv[]) {
     std::string outputFile = "channel_utilization_results.csv";
     std::string resultsDir = "results";
     bool verbose = false;
+    bool enableNetAnim = true;
 
     // コマンドライン引数の処理
     CommandLine cmd;
@@ -75,6 +77,7 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("output", "Output CSV file name", outputFile);
     cmd.AddValue("resultsDir", "Results directory path", resultsDir);
     cmd.AddValue("verbose", "Enable verbose logging", verbose);
+    cmd.AddValue("netanim", "Enable NetAnim trace generation", enableNetAnim);
     cmd.Parse(argc, argv);
 
     if (verbose) {
@@ -196,6 +199,54 @@ int main(int argc, char *argv[]) {
     // Flow Monitorのセットアップ
     FlowMonitorHelper flowmon;
     Ptr<FlowMonitor> monitor = flowmon.InstallAll();
+
+    // NetAnimトレースファイルの生成
+    AnimationInterface *anim = nullptr;
+    std::string animFile;
+    if (enableNetAnim) {
+        // 結果ディレクトリの作成
+        std::string mkdirCmd = "mkdir -p " + resultsDir;
+        system(mkdirCmd.c_str());
+        
+        // タイムスタンプ付きファイル名
+        time_t now = time(0);
+        struct tm tstruct;
+        char timestamp[80];
+        tstruct = *localtime(&now);
+        strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tstruct);
+        
+        animFile = resultsDir + "/animation_n" + std::to_string(nStations) + 
+                   "_h" + std::to_string(heavyUserPercentage) + 
+                   "_" + std::string(timestamp) + ".xml";
+        
+        anim = new AnimationInterface(animFile);
+        
+        // ノードの説明を追加
+        anim->UpdateNodeDescription(wifiApNode.Get(0), "AP");
+        for (uint32_t i = 0; i < nStations; ++i) {
+            std::string desc = (i < nHeavy) ? "Heavy-" : "Light-";
+            desc += std::to_string(i);
+            anim->UpdateNodeDescription(wifiStaNodes.Get(i), desc);
+        }
+        
+        // ノードの色を設定（APは青、Heavyは赤、Lightは緑）
+        anim->UpdateNodeColor(wifiApNode.Get(0), 0, 0, 255); // 青
+        for (uint32_t i = 0; i < nStations; ++i) {
+            if (i < nHeavy) {
+                anim->UpdateNodeColor(wifiStaNodes.Get(i), 255, 0, 0); // 赤（Heavy）
+            } else {
+                anim->UpdateNodeColor(wifiStaNodes.Get(i), 0, 255, 0); // 緑（Light）
+            }
+        }
+        
+        // ノードサイズの設定
+        anim->UpdateNodeSize(wifiApNode.Get(0)->GetId(), 2.0, 2.0);
+        for (uint32_t i = 0; i < nStations; ++i) {
+            anim->UpdateNodeSize(wifiStaNodes.Get(i)->GetId(), 1.0, 1.0);
+        }
+        
+        NS_LOG_INFO("NetAnim trace file will be saved to: " << animFile);
+    }
 
     // シミュレーション時間の記録
     g_startTime = Seconds(1.0);
@@ -404,6 +455,12 @@ int main(int argc, char *argv[]) {
     outFile.close();
 
     NS_LOG_INFO("CSV results written to " << csvFile);
+
+    // NetAnimリソースの解放
+    if (anim) {
+        delete anim;
+        NS_LOG_INFO("NetAnim trace written to " << animFile);
+    }
 
     Simulator::Destroy();
     return 0;

@@ -1,0 +1,3 @@
+nStations,nHeavy,nLight,heavyPercent,channelUtilization,avgThroughput,avgDelay,packetLoss
+10,5,5,50,83.9285,21.6306,2483.3,71.927
+10,5,5,50,83.9285,21.6306,2483.3,71.927
