@@ -16,6 +16,8 @@
 #include <fstream>
 #include <vector>
 #include <ctime>
+#include <sstream>
+#include <iomanip>
 
 using namespace ns3;
 
@@ -53,18 +55,53 @@ double CalculateChannelUtilization() {
     return (double)g_totalBusyTime / (double)g_totalTime * 100.0;
 }
 
+// 出力フォルダ名生成関数（日付_時間(JST)）
+std::string GenerateOutputFolder() {
+    time_t now = time(0);
+    struct tm tstruct;
+    char timestamp[100];
+    tstruct = *localtime(&now);
+    
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tstruct);
+    
+    std::ostringstream oss;
+    oss << "channelutilization_" << timestamp;
+    
+    return oss.str();
+}
+
+// タイムスタンプ生成関数（シミュレーション時間を含む）
+std::string GenerateTimestamp(double simTime) {
+    time_t now = time(0);
+    struct tm tstruct;
+    char timestamp[100];
+    tstruct = *localtime(&now);
+    
+    // 日時部分
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tstruct);
+    
+    // シミュレーション時間を追加
+    std::ostringstream oss;
+    oss << timestamp << "_t" << std::fixed << std::setprecision(1) << simTime << "s";
+    
+    return oss.str();
+}
+
 int main(int argc, char *argv[]) {
     // パラメータ設定
     uint32_t nStations = 10;           // クライアント数
-    uint32_t heavyUserPercentage = 50; // Heavyユーザの割合 (0-100%)
-    double simulationTime = 10.0;       // シミュレーション時間（秒）
-    uint32_t heavyUserRate = 100;      // Heavy: 100 Mbps
-    uint32_t lightUserRate = 50;       // Light: 50 Mbps (実際は≤50)
-    uint32_t packetSize = 1024;        // パケットサイズ（バイト）
-    std::string outputFile = "channel_utilization_results.csv";
-    std::string resultsDir = "results";
+    uint32_t heavyUserPercentage = 10; // Heavyユーザの割合 (0-100%)
+    double simulationTime = 10.0;       // シミュレーション時間(秒)
+    uint32_t heavyUserRate = 50;      // Heavy: 50 Mbps
+    uint32_t lightUserRate = 20;       // Light: 20 Mbps (実際は≤50)
+    uint32_t packetSize = 1500;       // パケットサイズ(バイト)
+    std::string outputFile = "channel_utilization_results_H50L20.csv";
     bool verbose = false;
     bool enableNetAnim = true;
+
+    // 出力フォルダの生成
+    std::string outputFolder = "results/" + GenerateOutputFolder();
+    std::string csvFolder = "result_csv";
 
     // コマンドライン引数の処理
     CommandLine cmd;
@@ -75,7 +112,6 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("lightRate", "Light user data rate in Mbps", lightUserRate);
     cmd.AddValue("packetSize", "Packet size in bytes", packetSize);
     cmd.AddValue("output", "Output CSV file name", outputFile);
-    cmd.AddValue("resultsDir", "Results directory path", resultsDir);
     cmd.AddValue("verbose", "Enable verbose logging", verbose);
     cmd.AddValue("netanim", "Enable NetAnim trace generation", enableNetAnim);
     cmd.Parse(argc, argv);
@@ -88,11 +124,11 @@ int main(int argc, char *argv[]) {
     uint32_t nHeavy = (nStations * heavyUserPercentage) / 100;
     uint32_t nLight = nStations - nHeavy;
 
-    NS_LOG_INFO("=== Simulation Parameters ===");
-    NS_LOG_INFO("Total Stations: " << nStations);
-    NS_LOG_INFO("Heavy Users: " << nHeavy << " (" << heavyUserPercentage << "%)");
-    NS_LOG_INFO("Light Users: " << nLight);
-    NS_LOG_INFO("Simulation Time: " << simulationTime << " seconds");
+    NS_LOG_INFO("=== シミュレーションパラメータ ===");
+    NS_LOG_INFO("総端末数: " << nStations);
+    NS_LOG_INFO("Heavyユーザ数: " << nHeavy << " (" << heavyUserPercentage << "%)");
+    NS_LOG_INFO("Lightユーザ数: " << nLight);
+    NS_LOG_INFO("シミュレーション時間: " << simulationTime << " 秒");
 
     // ノードの作成
     NodeContainer wifiApNode;
@@ -106,7 +142,7 @@ int main(int argc, char *argv[]) {
     YansWifiPhyHelper phy;
     phy.SetChannel(channel.Create());
 
-    // Wi-Fi MAC層の設定（802.11ac）
+    // Wi-Fi MAC層の設定(802.11ac)
     WifiHelper wifi;
     wifi.SetStandard(WIFI_STANDARD_80211ac);
     wifi.SetRemoteStationManager("ns3::ConstantRateWifiManager",
@@ -127,14 +163,14 @@ int main(int argc, char *argv[]) {
                 "ActiveProbing", BooleanValue(false));
     NetDeviceContainer staDevices = wifi.Install(phy, mac, wifiStaNodes);
 
-    // モビリティモデル（固定位置）
+    // モビリティモデル(固定位置)
     MobilityHelper mobility;
     Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator>();
     
     // APを中心に配置
     positionAlloc->Add(Vector(0.0, 0.0, 0.0));
     
-    // Stationを円形に配置（半径5m）
+    // Stationを円形に配置(半径5m)
     double radius = 5.0;
     for (uint32_t i = 0; i < nStations; ++i) {
         double angle = (2.0 * M_PI * i) / nStations;
@@ -157,17 +193,17 @@ int main(int argc, char *argv[]) {
     Ipv4InterfaceContainer apInterface = address.Assign(apDevice);
     Ipv4InterfaceContainer staInterfaces = address.Assign(staDevices);
 
-    // トラフィック生成（UDP）
+    // トラフィック生成(UDP)
     uint16_t port = 9;
     ApplicationContainer serverApps;
     ApplicationContainer clientApps;
 
     for (uint32_t i = 0; i < nStations; ++i) {
-        // サーバ（AP側）
+        // サーバ(AP側)
         UdpServerHelper server(port + i);
         serverApps.Add(server.Install(wifiApNode.Get(0)));
 
-        // クライアント（Station側）
+        // クライアント(Station側)
         UdpClientHelper client(apInterface.GetAddress(0), port + i);
         
         // Heavy/Lightの判定
@@ -204,27 +240,18 @@ int main(int argc, char *argv[]) {
     AnimationInterface *anim = nullptr;
     std::string animFile;
     if (enableNetAnim) {
-        // 結果ディレクトリの作成
-        std::string mkdirCmd = "mkdir -p " + resultsDir;
+        // 出力フォルダの作成
+        std::string mkdirCmd = "mkdir -p " + outputFolder;
         system(mkdirCmd.c_str());
         
-        // タイムスタンプ付きファイル名
-        time_t now = time(0);
-        struct tm tstruct;
-        char timestamp[80];
-        tstruct = *localtime(&now);
-        strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tstruct);
-        
-        animFile = resultsDir + "/animation_n" + std::to_string(nStations) + 
-                   "_h" + std::to_string(heavyUserPercentage) + 
-                   "_" + std::string(timestamp) + ".xml";
+        // アニメーションファイル名
+        animFile = outputFolder + "/animation_n" + std::to_string(nStations) + 
+                   "_h" + std::to_string(heavyUserPercentage) + ".xml";
         
         anim = new AnimationInterface(animFile);
         
         // パケットのトレースを有効化
         anim->EnablePacketMetadata(true);
-        anim->EnableIpv4RouteTracking(resultsDir + "/routingtable.xml", 
-                                      Seconds(0), Seconds(simulationTime), Seconds(0.5));
         anim->EnableWifiMacCounters(Seconds(0), Seconds(simulationTime));
         anim->EnableWifiPhyCounters(Seconds(0), Seconds(simulationTime));
         
@@ -236,13 +263,13 @@ int main(int argc, char *argv[]) {
             anim->UpdateNodeDescription(wifiStaNodes.Get(i), desc);
         }
         
-        // ノードの色を設定（APは青、Heavyは赤、Lightは緑）
+        // ノードの色を設定(APは青、Heavyは赤、Lightは緑)
         anim->UpdateNodeColor(wifiApNode.Get(0), 0, 0, 255); // 青
         for (uint32_t i = 0; i < nStations; ++i) {
             if (i < nHeavy) {
-                anim->UpdateNodeColor(wifiStaNodes.Get(i), 255, 0, 0); // 赤（Heavy）
+                anim->UpdateNodeColor(wifiStaNodes.Get(i), 255, 0, 0); // 赤(Heavy)
             } else {
-                anim->UpdateNodeColor(wifiStaNodes.Get(i), 0, 255, 0); // 緑（Light）
+                anim->UpdateNodeColor(wifiStaNodes.Get(i), 0, 255, 0); // 緑(Light)
             }
         }
         
@@ -252,7 +279,7 @@ int main(int argc, char *argv[]) {
             anim->UpdateNodeSize(wifiStaNodes.Get(i)->GetId(), 1.0, 1.0);
         }
         
-        NS_LOG_INFO("NetAnim trace file will be saved to: " << animFile);
+        NS_LOG_INFO("NetAnimトレースファイルの保存先: " << animFile);
     }
 
     // シミュレーション時間の記録
@@ -260,15 +287,15 @@ int main(int argc, char *argv[]) {
     g_endTime = Seconds(simulationTime);
 
     // シミュレーション実行
-    NS_LOG_INFO("Starting simulation...");
+    NS_LOG_INFO("シミュレーション開始...");
     Simulator::Stop(Seconds(simulationTime + 0.1));
     Simulator::Run();
 
     // 統計情報の収集
     double channelUtil = CalculateChannelUtilization();
     
-    NS_LOG_INFO("=== Simulation Results ===");
-    NS_LOG_INFO("Channel Utilization: " << channelUtil << "%");
+    NS_LOG_INFO("=== シミュレーション結果 ===");
+    NS_LOG_INFO("チャネル使用率: " << channelUtil << "%");
 
     // Flow Monitorの統計
     monitor->CheckForLostPackets();
@@ -295,178 +322,108 @@ int main(int argc, char *argv[]) {
     double packetLoss = (totalTxPackets > 0) ? 
                         (1.0 - (double)totalRxPackets / totalTxPackets) * 100.0 : 0.0;
 
-    NS_LOG_INFO("Average Throughput: " << avgThroughput << " Mbps");
-    NS_LOG_INFO("Average Delay: " << avgDelay << " ms");
-    NS_LOG_INFO("Packet Loss Rate: " << packetLoss << "%");
+    NS_LOG_INFO("平均スループット: " << avgThroughput << " Mbps");
+    NS_LOG_INFO("平均遅延: " << avgDelay << " ms");
+    NS_LOG_INFO("パケット損失率: " << packetLoss << "%");
 
-    // 結果ディレクトリの作成
-    std::string mkdirCmd = "mkdir -p " + resultsDir;
-    system(mkdirCmd.c_str());
-
-    // タイムスタンプ付きファイル名の生成
-    time_t now = time(0);
-    struct tm tstruct;
-    char timestamp[80];
-    tstruct = *localtime(&now);
-    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", &tstruct);
+    // タイムスタンプ付きファイル名の生成（シミュレーション時間を含む）
+    std::string timestamp = GenerateTimestamp(simulationTime);
     
-    std::string baseName = resultsDir + "/sim_n" + std::to_string(nStations) + 
-                          "_h" + std::to_string(heavyUserPercentage) + 
-                          "_" + std::string(timestamp);
-    
-    std::string txtFile = baseName + ".txt";
-    std::string xmlFile = baseName + ".xml";
+    std::string txtFile = outputFolder + "/results_n" + std::to_string(nStations) + 
+                          "_h" + std::to_string(heavyUserPercentage) + ".txt";
 
     // テキストファイルへの出力
     std::ofstream txtOut(txtFile);
     txtOut << "========================================" << std::endl;
-    txtOut << "ns-3 Wi-Fi Channel Utilization Simulation Results" << std::endl;
+    txtOut << "ns-3 無線LANチャネル使用率シミュレーション結果" << std::endl;
     txtOut << "========================================" << std::endl;
     txtOut << std::endl;
     
-    txtOut << "[Simulation Parameters]" << std::endl;
-    txtOut << "Total Stations: " << nStations << std::endl;
-    txtOut << "Heavy Users: " << nHeavy << " (" << heavyUserPercentage << "%)" << std::endl;
-    txtOut << "Light Users: " << nLight << " (" << (100 - heavyUserPercentage) << "%)" << std::endl;
-    txtOut << "Heavy User Rate: " << heavyUserRate << " Mbps" << std::endl;
-    txtOut << "Light User Rate: " << lightUserRate << " Mbps" << std::endl;
-    txtOut << "Packet Size: " << packetSize << " bytes" << std::endl;
-    txtOut << "Simulation Time: " << simulationTime << " seconds" << std::endl;
+    txtOut << "[シミュレーションパラメータ]" << std::endl;
+    txtOut << "総端末数: " << nStations << std::endl;
+    txtOut << "Heavyユーザ数: " << nHeavy << " (" << heavyUserPercentage << "%)" << std::endl;
+    txtOut << "Lightユーザ数: " << nLight << " (" << (100 - heavyUserPercentage) << "%)" << std::endl;
+    txtOut << "Heavyユーザデータレート: " << heavyUserRate << " Mbps" << std::endl;
+    txtOut << "Lightユーザデータレート: " << lightUserRate << " Mbps" << std::endl;
+    txtOut << "パケットサイズ: " << packetSize << " バイト" << std::endl;
+    txtOut << "シミュレーション時間: " << simulationTime << " 秒" << std::endl;
+    txtOut << "実行日時: " << timestamp << std::endl;
     txtOut << std::endl;
     
-    txtOut << "[Channel Utilization]" << std::endl;
-    txtOut << "Channel Utilization: " << channelUtil << " %" << std::endl;
-    txtOut << "Total Busy Time: " << g_totalBusyTime / 1e9 << " seconds" << std::endl;
-    txtOut << "Total Time: " << g_totalTime / 1e9 << " seconds" << std::endl;
+    txtOut << "[チャネル使用率]" << std::endl;
+    txtOut << "チャネル使用率: " << channelUtil << " %" << std::endl;
+    txtOut << "総ビジー時間: " << g_totalBusyTime / 1e9 << " 秒" << std::endl;
+    txtOut << "総測定時間: " << g_totalTime / 1e9 << " 秒" << std::endl;
     txtOut << std::endl;
     
-    txtOut << "[Performance Metrics]" << std::endl;
-    txtOut << "Average Throughput: " << avgThroughput << " Mbps" << std::endl;
-    txtOut << "Total Throughput: " << totalThroughput << " Mbps" << std::endl;
-    txtOut << "Average Delay: " << avgDelay << " ms" << std::endl;
-    txtOut << "Packet Loss Rate: " << packetLoss << " %" << std::endl;
-    txtOut << "Total Tx Packets: " << totalTxPackets << std::endl;
-    txtOut << "Total Rx Packets: " << totalRxPackets << std::endl;
+    txtOut << "[性能指標]" << std::endl;
+    txtOut << "平均スループット: " << avgThroughput << " Mbps" << std::endl;
+    txtOut << "総スループット: " << totalThroughput << " Mbps" << std::endl;
+    txtOut << "平均遅延: " << avgDelay << " ms" << std::endl;
+    txtOut << "パケット損失率: " << packetLoss << " %" << std::endl;
+    txtOut << "総送信パケット数: " << totalTxPackets << std::endl;
+    txtOut << "総受信パケット数: " << totalRxPackets << std::endl;
     txtOut << std::endl;
     
-    txtOut << "[Per-Flow Throughput]" << std::endl;
+    txtOut << "[フロー別スループット]" << std::endl;
     uint32_t flowIdx = 0;
     for (auto const &flow : stats) {
         Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(flow.first);
         double throughput = flow.second.rxBytes * 8.0 / (simulationTime - 1.0) / 1e6;
         std::string userType = (flowIdx < nHeavy) ? "Heavy" : "Light";
-        txtOut << "Flow " << flowIdx << " (" << userType << "): " 
+        txtOut << "フロー " << flowIdx << " (" << userType << "): " 
                << throughput << " Mbps" << std::endl;
         flowIdx++;
     }
     txtOut << std::endl;
     
-    txtOut << "[Flow Monitor Statistics]" << std::endl;
+    txtOut << "[フロー詳細統計]" << std::endl;
     flowIdx = 0;
     for (auto const &flow : stats) {
-        txtOut << "Flow " << flowIdx << ":" << std::endl;
-        txtOut << "  Tx Packets: " << flow.second.txPackets << std::endl;
-        txtOut << "  Rx Packets: " << flow.second.rxPackets << std::endl;
-        txtOut << "  Tx Bytes: " << flow.second.txBytes << std::endl;
-        txtOut << "  Rx Bytes: " << flow.second.rxBytes << std::endl;
-        txtOut << "  Lost Packets: " << flow.second.lostPackets << std::endl;
+        txtOut << "フロー " << flowIdx << ":" << std::endl;
+        txtOut << "  送信パケット数: " << flow.second.txPackets << std::endl;
+        txtOut << "  受信パケット数: " << flow.second.rxPackets << std::endl;
+        txtOut << "  送信バイト数: " << flow.second.txBytes << std::endl;
+        txtOut << "  受信バイト数: " << flow.second.rxBytes << std::endl;
+        txtOut << "  損失パケット数: " << flow.second.lostPackets << std::endl;
         if (flow.second.rxPackets > 0) {
-            txtOut << "  Average Delay: " << (flow.second.delaySum.GetSeconds() / flow.second.rxPackets) * 1000.0 << " ms" << std::endl;
+            txtOut << "  平均遅延: " << (flow.second.delaySum.GetSeconds() / flow.second.rxPackets) * 1000.0 << " ms" << std::endl;
         }
         txtOut << std::endl;
         flowIdx++;
     }
     txtOut.close();
     
-    NS_LOG_INFO("Text results written to " << txtFile);
+    NS_LOG_INFO("テキスト形式の結果を出力しました: " << txtFile);
 
-    // XMLファイルへの出力
-    std::ofstream xmlOut(xmlFile);
-    xmlOut << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" << std::endl;
-    xmlOut << "<simulation>" << std::endl;
-    xmlOut << "  <parameters>" << std::endl;
-    xmlOut << "    <totalStations>" << nStations << "</totalStations>" << std::endl;
-    xmlOut << "    <heavyUsers>" << nHeavy << "</heavyUsers>" << std::endl;
-    xmlOut << "    <lightUsers>" << nLight << "</lightUsers>" << std::endl;
-    xmlOut << "    <heavyUserPercentage>" << heavyUserPercentage << "</heavyUserPercentage>" << std::endl;
-    xmlOut << "    <heavyUserRate unit=\"Mbps\">" << heavyUserRate << "</heavyUserRate>" << std::endl;
-    xmlOut << "    <lightUserRate unit=\"Mbps\">" << lightUserRate << "</lightUserRate>" << std::endl;
-    xmlOut << "    <packetSize unit=\"bytes\">" << packetSize << "</packetSize>" << std::endl;
-    xmlOut << "    <simulationTime unit=\"seconds\">" << simulationTime << "</simulationTime>" << std::endl;
-    xmlOut << "    <timestamp>" << timestamp << "</timestamp>" << std::endl;
-    xmlOut << "  </parameters>" << std::endl;
-    xmlOut << std::endl;
+    // 結果をCSVファイルに出力(累積用)
+    // CSVフォルダの作成
+    std::string mkdirCsvCmd = "mkdir -p " + csvFolder;
+    system(mkdirCsvCmd.c_str());
     
-    xmlOut << "  <channelUtilization>" << std::endl;
-    xmlOut << "    <utilization unit=\"percent\">" << channelUtil << "</utilization>" << std::endl;
-    xmlOut << "    <totalBusyTime unit=\"seconds\">" << g_totalBusyTime / 1e9 << "</totalBusyTime>" << std::endl;
-    xmlOut << "    <totalTime unit=\"seconds\">" << g_totalTime / 1e9 << "</totalTime>" << std::endl;
-    xmlOut << "  </channelUtilization>" << std::endl;
-    xmlOut << std::endl;
-    
-    xmlOut << "  <performanceMetrics>" << std::endl;
-    xmlOut << "    <averageThroughput unit=\"Mbps\">" << avgThroughput << "</averageThroughput>" << std::endl;
-    xmlOut << "    <totalThroughput unit=\"Mbps\">" << totalThroughput << "</totalThroughput>" << std::endl;
-    xmlOut << "    <averageDelay unit=\"ms\">" << avgDelay << "</averageDelay>" << std::endl;
-    xmlOut << "    <packetLossRate unit=\"percent\">" << packetLoss << "</packetLossRate>" << std::endl;
-    xmlOut << "    <totalTxPackets>" << totalTxPackets << "</totalTxPackets>" << std::endl;
-    xmlOut << "    <totalRxPackets>" << totalRxPackets << "</totalRxPackets>" << std::endl;
-    xmlOut << "  </performanceMetrics>" << std::endl;
-    xmlOut << std::endl;
-    
-    xmlOut << "  <flows>" << std::endl;
-    flowIdx = 0;
-    for (auto const &flow : stats) {
-        Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(flow.first);
-        double throughput = flow.second.rxBytes * 8.0 / (simulationTime - 1.0) / 1e6;
-        std::string userType = (flowIdx < nHeavy) ? "Heavy" : "Light";
-        double flowDelay = (flow.second.rxPackets > 0) ? 
-                          (flow.second.delaySum.GetSeconds() / flow.second.rxPackets) * 1000.0 : 0.0;
-        
-        xmlOut << "    <flow id=\"" << flowIdx << "\" type=\"" << userType << "\">" << std::endl;
-        xmlOut << "      <sourceIP>" << t.sourceAddress << "</sourceIP>" << std::endl;
-        xmlOut << "      <destinationIP>" << t.destinationAddress << "</destinationIP>" << std::endl;
-        xmlOut << "      <sourcePort>" << t.sourcePort << "</sourcePort>" << std::endl;
-        xmlOut << "      <destinationPort>" << t.destinationPort << "</destinationPort>" << std::endl;
-        xmlOut << "      <throughput unit=\"Mbps\">" << throughput << "</throughput>" << std::endl;
-        xmlOut << "      <txPackets>" << flow.second.txPackets << "</txPackets>" << std::endl;
-        xmlOut << "      <rxPackets>" << flow.second.rxPackets << "</rxPackets>" << std::endl;
-        xmlOut << "      <txBytes>" << flow.second.txBytes << "</txBytes>" << std::endl;
-        xmlOut << "      <rxBytes>" << flow.second.rxBytes << "</rxBytes>" << std::endl;
-        xmlOut << "      <lostPackets>" << flow.second.lostPackets << "</lostPackets>" << std::endl;
-        xmlOut << "      <averageDelay unit=\"ms\">" << flowDelay << "</averageDelay>" << std::endl;
-        xmlOut << "    </flow>" << std::endl;
-        flowIdx++;
-    }
-    xmlOut << "  </flows>" << std::endl;
-    xmlOut << "</simulation>" << std::endl;
-    xmlOut.close();
-    
-    NS_LOG_INFO("XML results written to " << xmlFile);
-
-    // 結果をCSVファイルに出力（累積用）
-    std::string csvFile = resultsDir + "/" + outputFile;
+    std::string csvFile = csvFolder + "/" + outputFile;
     std::ofstream outFile;
     bool fileExists = std::ifstream(csvFile).good();
     outFile.open(csvFile, std::ios::app);
 
     if (!fileExists) {
         // ヘッダー行
-        outFile << "nStations,nHeavy,nLight,heavyPercent,channelUtilization,";
-        outFile << "avgThroughput,avgDelay,packetLoss" << std::endl;
+        outFile << "nStations,nHeavy,nLight,heavyPercent,simulationTime,channelUtilization,";
+        outFile << "avgThroughput,avgDelay,packetLoss,timestamp" << std::endl;
     }
 
     outFile << nStations << "," << nHeavy << "," << nLight << "," 
-            << heavyUserPercentage << "," << channelUtil << ","
-            << avgThroughput << "," << avgDelay << "," << packetLoss << std::endl;
+            << heavyUserPercentage << "," << simulationTime << "," << channelUtil << ","
+            << avgThroughput << "," << avgDelay << "," << packetLoss << ","
+            << timestamp << std::endl;
     outFile.close();
 
-    NS_LOG_INFO("CSV results written to " << csvFile);
+    NS_LOG_INFO("CSV形式の結果を出力しました: " << csvFile);
 
     // NetAnimリソースの解放
     if (anim) {
         delete anim;
-        NS_LOG_INFO("NetAnim trace written to " << animFile);
+        NS_LOG_INFO("NetAnimトレースを出力しました: " << animFile);
     }
 
     Simulator::Destroy();

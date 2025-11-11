@@ -1,0 +1,2 @@
+nStations,nHeavy,nLight,heavyPercent,simulationTime,channelUtilization,avgThroughput,avgDelay,packetLoss,timestamp
+10,0,10,0,10,80.9446,19.7071,118.209,3.27,20251111_090332_t10.0s
