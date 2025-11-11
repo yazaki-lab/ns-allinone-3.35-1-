@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
     uint32_t heavyUserRate = 50;      // Heavy: 50 Mbps
     uint32_t lightUserRate = 20;       // Light: 20 Mbps (実際は≤30)
     uint32_t packetSize = 1500;       // パケットサイズ(バイト)
-    std::string outputFile = "channel_utilization_results_H50L20.csv";
+    std::string outputFile = "channel_utilization_results_H50L20_rad75.csv";
     bool verbose = false;
     bool enableNetAnim = true;
 
@@ -170,8 +170,8 @@ int main(int argc, char *argv[]) {
     // APを中心に配置
     positionAlloc->Add(Vector(0.0, 0.0, 0.0));
 
-    // Stationを円形に配置(半径5m)
-    double radius = 5.0;
+    // Stationを円形に配置(半径7.5m)
+    double radius = 7.5;
     for (uint32_t i = 0; i < nStations; ++i) {
         double angle = (2.0 * M_PI * i) / nStations;
         positionAlloc->Add(Vector(radius * cos(angle), radius * sin(angle), 0.0));
