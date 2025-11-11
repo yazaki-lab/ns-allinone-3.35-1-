@@ -90,10 +90,10 @@ std::string GenerateTimestamp(double simTime) {
 int main(int argc, char *argv[]) {
     // パラメータ設定
     uint32_t nStations = 10;           // クライアント数
-    uint32_t heavyUserPercentage = 10; // Heavyユーザの割合 (0-100%)
-    double simulationTime = 10.0;       // シミュレーション時間(秒)
+    uint32_t heavyUserPercentage = 100; // Heavyユーザの割合 (0-100%)
+    double simulationTime = 10.0;      // シミュレーション時間(秒)
     uint32_t heavyUserRate = 50;      // Heavy: 50 Mbps
-    uint32_t lightUserRate = 20;       // Light: 20 Mbps (実際は≤50)
+    uint32_t lightUserRate = 20;       // Light: 20 Mbps (実際は≤30)
     uint32_t packetSize = 1500;       // パケットサイズ(バイト)
     std::string outputFile = "channel_utilization_results_H50L20.csv";
     bool verbose = false;
@@ -169,7 +169,7 @@ int main(int argc, char *argv[]) {
     
     // APを中心に配置
     positionAlloc->Add(Vector(0.0, 0.0, 0.0));
-    
+
     // Stationを円形に配置(半径5m)
     double radius = 5.0;
     for (uint32_t i = 0; i < nStations; ++i) {
@@ -408,8 +408,8 @@ int main(int argc, char *argv[]) {
 
     if (!fileExists) {
         // ヘッダー行
-        outFile << "nStations,nHeavy,nLight,heavyPercent,simulationTime,channelUtilization,";
-        outFile << "avgThroughput,avgDelay,packetLoss,timestamp" << std::endl;
+        outFile << "クライアント数,重ユーザ数,軽ユーザ数,重ユーザ割合,シミュレーション時間,チャネル使用率,";
+        outFile << "平均スループット,平均遅延,パケット損失率,タイムスタンプ" << std::endl;
     }
 
     outFile << nStations << "," << nHeavy << "," << nLight << "," 
