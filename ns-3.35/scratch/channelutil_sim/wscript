@@ -1,0 +1,20 @@
+def build(bld):
+    import os
+    
+    # Homebrewのパスを判定
+    if os.path.exists('/opt/homebrew/include'):
+        yaml_include = '/opt/homebrew/include'
+        yaml_lib = '/opt/homebrew/lib'
+    else:
+        yaml_include = '/usr/local/include'
+        yaml_lib = '/usr/local/lib'
+    
+    # channelutilizationプログラム
+    obj = bld.create_ns3_program('channelutilization',
+                                  ['core', 'network', 'internet', 'mobility',
+                                   'wifi', 'applications', 'flow-monitor', 'netanim'])
+    obj.source = 'channelutilization.cc'
+    obj.includes = [yaml_include]
+    obj.lib = ['yaml-cpp']
+    obj.libpath = [yaml_lib]
+    obj.rpath = [yaml_lib]

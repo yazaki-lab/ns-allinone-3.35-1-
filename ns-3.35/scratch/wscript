@@ -1,0 +1,12 @@
+def build(bld):
+    obj = bld.create_ns3_program('channelutilization',
+                                  ['core', 'network', 'internet', 'mobility',
+                                   'wifi', 'applications', 'flow-monitor', 'netanim'])
+    obj.source = 'channelutilization.cc'
+    
+    # yaml-cppライブラリのリンク
+    obj.use = 'yaml-cpp'
+    obj.lib = ['yaml-cpp']
+    
+    # インクルードパスの追加(必要に応じて調整)
+    obj.includes = ['/usr/include']

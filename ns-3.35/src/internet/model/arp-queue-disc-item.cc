@@ -99,8 +99,8 @@ ArpQueueDiscItem::Hash (uint32_t perturbation) const
   uint8_t type = m_header.IsRequest () ? ArpHeader::ARP_TYPE_REQUEST : ArpHeader::ARP_TYPE_REPLY;
 
   /* serialize the addresses and the perturbation in buf */
-  uint8_t tmp = 8 + macSrc.GetLength () + macDst.GetLength ();
-  uint8_t buf[tmp + 5];
+  const uint8_t tmp = 8 + macSrc.GetLength () + macDst.GetLength ();
+  uint8_t buf[tmp + 5];  // constにする
   ipv4Src.Serialize (buf);
   ipv4Dst.Serialize (buf + 4);
   macSrc.CopyTo (buf + 8);
