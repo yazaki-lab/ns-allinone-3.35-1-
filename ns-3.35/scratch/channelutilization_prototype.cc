@@ -1,4 +1,3 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
  * ns-3 無線LAN チャネル使用率シミュレーション
  * Heavy/Lightユーザの混在環境でのチャネル使用率測定
