@@ -1,20 +1,36 @@
 def build(bld):
     import os
     
-    # Homebrewのパスを判定
-    if os.path.exists('/opt/homebrew/include'):
-        yaml_include = '/opt/homebrew/include'
-        yaml_lib = '/opt/homebrew/lib'
-    else:
-        yaml_include = '/usr/local/include'
-        yaml_lib = '/usr/local/lib'
+    # yaml-cppのパスを確認
+    yaml_lib_path = '/opt/homebrew/lib'
+    yaml_include_path = '/opt/homebrew/include'
     
-    # channelutilizationプログラム
+    if not os.path.exists(os.path.join(yaml_lib_path, 'libyaml-cpp.dylib')):
+        yaml_lib_path = '/usr/local/lib'
+        yaml_include_path = '/usr/local/include'
+    
+    print("=== YAML-CPP Configuration ===")
+    print("Include Path:", yaml_include_path)
+    print("Library Path:", yaml_lib_path)
+    print("==============================")
+    
+    # プログラムのビルド
     obj = bld.create_ns3_program('channelutilization',
                                   ['core', 'network', 'internet', 'mobility',
                                    'wifi', 'applications', 'flow-monitor', 'netanim'])
     obj.source = 'channelutilization.cc'
-    obj.includes = [yaml_include]
+    
+    # コンパイラフラグ
+    obj.cxxflags = ['-I' + yaml_include_path]
+    
+    # リンカーフラグ（これが最も重要）
+    obj.linkflags = ['-L' + yaml_lib_path, '-lyaml-cpp']
+    
+    # ライブラリとパス
     obj.lib = ['yaml-cpp']
-    obj.libpath = [yaml_lib]
-    obj.rpath = [yaml_lib]
+    obj.libpath = [yaml_lib_path]
+    obj.rpath = [yaml_lib_path]
+    
+    # 追加の設定
+    obj.use = []
+    obj.uselib = []

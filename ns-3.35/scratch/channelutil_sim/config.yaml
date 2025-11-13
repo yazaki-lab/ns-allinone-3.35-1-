@@ -9,14 +9,14 @@ nHeavyUsers: 10
 # 軽ユーザ数
 nLightUsers: 0
 
-# 重ユーザ割合(%) ※nHeavyUsers/nStations * 100 と一致させること
+# 重ユーザ割合(%) ※nHeavyUsers/nStations * 100 と一致させる
 heavyUserPercentage: 100
 
 # 実行環境の配置半径(m)
-radius: 7.5
+radius: 5.0
 
 # 出力CSVファイル名
-outputFile: "channel_utilization_results.csv"
+outputFile: "channel_utilization_results_yaml.csv"
 
 # 重ユーザのデータレート(Mbps)
 heavyUserRate: 50

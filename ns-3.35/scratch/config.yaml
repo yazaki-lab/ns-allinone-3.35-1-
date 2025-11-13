@@ -1,0 +1,40 @@
+# ns-3 無線LANチャネル使用率シミュレーション 設定ファイル
+
+# 総ユーザ数
+nStations: 10
+
+# 重ユーザ数
+nHeavyUsers: 10
+
+# 軽ユーザ数
+nLightUsers: 0
+
+# 重ユーザ割合(%) ※nHeavyUsers/nStations * 100 と一致させること
+heavyUserPercentage: 100
+
+# 実行環境の配置半径(m)
+radius: 7.5
+
+# 出力CSVファイル名
+outputFile: "channel_utilization_results.csv"
+
+# 重ユーザのデータレート(Mbps)
+heavyUserRate: 50
+
+# 軽ユーザのデータレート(Mbps)
+lightUserRate: 20
+
+# パケットサイズ(バイト)
+packetSize: 1500
+
+# シミュレーション時間(秒)
+simulationTime: 10.0
+
+# TXT形式の詳細結果出力を有効化
+enableTxtOutput: true
+
+# NetAnimトレース生成を有効化
+enableNetAnim: true
+
+# 詳細ログ出力
+verbose: false
