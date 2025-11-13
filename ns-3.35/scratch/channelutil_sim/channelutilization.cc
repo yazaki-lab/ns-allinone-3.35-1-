@@ -189,6 +189,10 @@ void GenerateDefaultConfig(const std::string& filename) {
 }
 
 int main(int argc, char *argv[]) {
+    // 乱数シードを設定
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
+
     // デフォルト設定
     std::string configFile = "config.yaml";
     bool generateConfig = false;

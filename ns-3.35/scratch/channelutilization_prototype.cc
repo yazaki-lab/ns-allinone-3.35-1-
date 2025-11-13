@@ -87,6 +87,9 @@ std::string GenerateTimestamp(double simTime) {
 }
 
 int main(int argc, char *argv[]) {
+    // 乱数シードを設定
+    RngSeedManager::SetSeed(1);
+    RngSeedManager::SetRun(1);
     // パラメータ設定
     uint32_t nStations = 10;           // クライアント数
     uint32_t heavyUserPercentage = 100; // Heavyユーザの割合 (0-100%)
