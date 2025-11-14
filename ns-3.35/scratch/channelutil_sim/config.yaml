@@ -13,7 +13,7 @@ nLightUsers: 0
 heavyUserPercentage: 100
 
 # 実行環境の配置半径(m)
-radius: 5.0
+radius: 7.5
 
 # 出力CSVファイル名
 outputFile: "channel_utilization_results_yaml.csv"

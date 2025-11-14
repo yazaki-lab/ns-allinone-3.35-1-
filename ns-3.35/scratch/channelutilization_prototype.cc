@@ -30,12 +30,12 @@ Time g_endTime;
 
 // 統計情報の構造体
 struct SimulationStats {
-    uint32_t numHeavyUsers;
-    uint32_t numLightUsers;
-    double channelUtilization;
-    std::vector<double> throughputs;
-    double avgDelay;
-    double packetLoss;
+    uint32_t numHeavyUsers; // 重ユーザ数
+    uint32_t numLightUsers; // 軽ユーザ数
+    double channelUtilization; // チャネル使用率
+    std::vector<double> throughputs; // スループット
+    double avgDelay; // 平均遅延
+    double packetLoss; // パケット損失率
 };
 
 // PHY状態変化のコールバック
@@ -126,6 +126,7 @@ int main(int argc, char *argv[]) {
     uint32_t nHeavy = (nStations * heavyUserPercentage) / 100;
     uint32_t nLight = nStations - nHeavy;
 
+    // シミュレーションパラメータの表示
     NS_LOG_INFO("=== シミュレーションパラメータ ===");
     NS_LOG_INFO("総端末数: " << nStations);
     NS_LOG_INFO("Heavyユーザ数: " << nHeavy << " (" << heavyUserPercentage << "%)");

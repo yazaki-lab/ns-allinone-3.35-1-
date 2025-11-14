@@ -220,6 +220,7 @@ int main(int argc, char *argv[]) {
     std::string outputFolder = "results/" + GenerateOutputFolder();
     std::string csvFolder = "result_csv";
 
+    //シミュレーションパラメータの表示
     NS_LOG_INFO("=== シミュレーションパラメータ ===");
     NS_LOG_INFO("設定ファイル: " << configFile);
     NS_LOG_INFO("総端末数: " << config.nStations);
