@@ -901,6 +901,15 @@ def configure(conf):
     conf.report_optional_feature("GSL", "GNU Scientific Library (GSL)",
                                  conf.env['ENABLE_GSL'],
                                  "GSL not found")
+        # ---- yaml-cpp detection ----
+    conf.check_cxx(
+        lib='yaml-cpp',
+        uselib_store='YAMLCPP',
+        includes=['/opt/homebrew/include'],
+        libpath=['/opt/homebrew/lib'],
+        mandatory=True
+    )
+
 
     conf.find_program('libgcrypt-config', var='LIBGCRYPT_CONFIG', msg="libgcrypt-config", mandatory=False)
     if env.LIBGCRYPT_CONFIG:
